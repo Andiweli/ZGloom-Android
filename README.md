@@ -2,7 +2,7 @@
 
 ZGloom-Android is an Android port of the modern **ZGloom** engine, bringing the classic Amiga FPS **Gloom** (plus Gloom Deluxe, Gloom 3 and Zombie Massacre) to Android devices and the OUYA micro-console.
 
-This project is based on the Windows ZGloom fork and adapts the renderer and game logic for Android (SDL2 + native C++).
+This project is based on the [Windows ZGloom fork](https://github.com/Andiweli/ZGloom) and adapts the renderer and game logic for Android (SDL2 + native C++).
 
 ---
 
@@ -10,12 +10,6 @@ This project is based on the Windows ZGloom fork and adapts the renderer and gam
 
 - **Android port of the Amiga Gloom engine**  
   Runs the original Gloom data files on Android / OUYA using a native C++ core.
-
-- **Supports original games and compatible mods**  
-  Works with the Gloom family of games and compatible mods (e.g. “Death Mask”, “8bit Killer”) as long as they follow the original engine layout.
-
-- **Built-in multi-game launcher**  
-  When multiple games are installed, a simple launcher lets you choose between **Gloom**, **Gloom Deluxe**, **Gloom 3**, **Zombie Massacre** or supported mods at startup.
 
 - **4:3 and 16:9 display modes with FOV control**  
   Switch between the classic 4:3 look and a widescreen 16:9 mode and adjust the field of view to match your TV or display.
@@ -35,7 +29,7 @@ This project is based on the Windows ZGloom fork and adapts the renderer and gam
 ZGloom-Android is currently in **early development / testing**:
 
 - Focus: OUYA and Android TV-style devices with a gamepad  
-- Touch controls are not the main target right now  
+- Touch controls are not in the scope of this Port  
 
 Check the **Releases** section for test builds once they become available.
 
@@ -44,16 +38,7 @@ Check the **Releases** section for test builds once they become available.
 ## 🚀 Getting Started
 
 1. Install the ZGloom-Android `.apk` on your Android device or OUYA.
-2. Copy your original Gloom game data to the app’s data directory (exact paths will be documented in the first release).
-3. Launch ZGloom-Android and select the game you want to play from the launcher.
-
-You will need data from at least one of:
-
-- **Gloom**
-- **Gloom Deluxe**
-- **Gloom 3**
-- **Zombie Massacre**
-- compatible mods
+2. Launch ZGloom-Android.
 
 ---
 
@@ -82,5 +67,3 @@ ZGloom-Android aims to bring the enhanced **ZGloom** experience to Android and O
 - modernized renderer and visual tweaks  
 - support for multiple Gloom-based games and selected mods  
 - console-style controls and TV-friendly presentation
-
-If you are interested in testing or contributing, feel free to open an issue or pull request.
