@@ -67,3 +67,4 @@ ZGloom-Android aims to bring the enhanced **ZGloom** experience to Android and O
 - modernized renderer and visual tweaks  
 - support for multiple Gloom-based games and selected mods  
 - console-style controls and TV-friendly presentation
+- background ambience by Prophet
