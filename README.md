@@ -22,6 +22,9 @@ This project is based on the [Windows ZGloom fork](https://github.com/Andiweli/Z
 
 > Note: ZGloom-Android is under active development. Not all features from the Windows port are available in every test build yet.
 
+<img width="1280" height="1440" alt="image" src="https://github.com/user-attachments/assets/a5414fd4-56f8-4db9-97b3-ca781fd41e31" />
+
+
 ---
 
 ## 📦 Status
