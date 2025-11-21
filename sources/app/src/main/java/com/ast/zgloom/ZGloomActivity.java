@@ -3,6 +3,9 @@ package com.ast.zgloom;
 import android.content.res.AssetManager;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Gravity;
+import android.widget.RelativeLayout;
+import android.widget.TextView;
 
 import org.libsdl.app.SDLActivity;
 
@@ -33,15 +36,81 @@ public class ZGloomActivity extends SDLActivity {
     private static final String DATA_DIR_NAME = "ZGloom";
     private static final String DATA_INSTALL_MARKER = ".zgloom_data_v1";
 
+    private boolean mInstallStarted = false;
+    private boolean mInstallFinished = false;
+    private TextView mInstallHintView = null;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // Install/copy bundled game data into app-specific external storage
-        // before SDL/Native code starts using the DataRoot.
-        installGameDataIfNeeded();
+        // Let SDLActivity set up the window and layout first.
         super.onCreate(savedInstanceState);
     }
 
-    @Override
+        @Override
+    protected void resumeNativeThread() {
+        // Delay starting the native thread until game data is installed.
+        if (mInstallFinished) {
+            super.resumeNativeThread();
+            return;
+        }
+
+        if (!mInstallStarted) {
+            mInstallStarted = true;
+
+            // Show a simple centered message while installing assets.
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (mLayout == null) {
+                        return;
+                    }
+                    mInstallHintView = new TextView(ZGloomActivity.this);
+                    mInstallHintView.setText("Installing Game Data. Please wait...");
+                    mInstallHintView.setTextColor(0xFFFFFFFF);
+                    mInstallHintView.setTextSize(18);
+                    mInstallHintView.setGravity(Gravity.CENTER);
+
+                    RelativeLayout.LayoutParams lp =
+                            new RelativeLayout.LayoutParams(
+                                    RelativeLayout.LayoutParams.WRAP_CONTENT,
+                                    RelativeLayout.LayoutParams.WRAP_CONTENT);
+                    lp.addRule(RelativeLayout.CENTER_IN_PARENT, RelativeLayout.TRUE);
+                    mLayout.addView(mInstallHintView, lp);
+                }
+            });
+
+            // Run the asset installation on a background thread to avoid blocking the UI.
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    installGameDataIfNeeded();
+                    mInstallFinished = true;
+
+                    // Once done, remove the hint and start the native thread.
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (mLayout != null && mInstallHintView != null) {
+                                mLayout.removeView(mInstallHintView);
+                                mInstallHintView = null;
+                            }
+                            ZGloomActivity.super.resumeNativeThread();
+                        }
+                    });
+                }
+            }, "ZGloomDataInstall").start();
+
+            // Do not call super.resumeNativeThread() here; we will call it
+            // from the background thread when installation has finished.
+            return;
+        }
+
+        // Installation is still running; the background thread will resume
+        // the native thread when it completes.
+    }
+
+
+@Override
     protected String[] getLibraries() {
         // Order is important: SDL core, then optional add-ons, then the game.
         return new String[] {

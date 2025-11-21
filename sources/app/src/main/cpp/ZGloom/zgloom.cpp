@@ -111,6 +111,24 @@ static inline void ZHUD_Destroy() {
     if (g_ZHudTex) { SDL_DestroyTexture(g_ZHudTex); g_ZHudTex = nullptr; }
 }
 
+// Ensure HUD resources are valid for this frame (handle context loss / size change)
+static inline void ZHUD_EnsureAlive(SDL_Renderer* ren, int w, int h) {
+    // If nothing yet, just create fresh resources
+    if (!g_ZHudTex || !g_ZHudLayer32) {
+        ZHUD_EnsureCreated(ren, w, h);
+        return;
+    }
+
+    // Verify texture is still valid and matches expected size
+    Uint32 fmt = 0;
+    int access = 0, tw = 0, th = 0;
+    if (SDL_QueryTexture(g_ZHudTex, &fmt, &access, &tw, &th) != 0 || tw != w || th != h) {
+        // Renderer may have been reset or size changed; recreate HUD resources
+        ZHUD_Destroy();
+        ZHUD_EnsureCreated(ren, w, h);
+    }
+}
+
 // Convenience accessors if your code used 'hudTex' / 'hudLayer32' names before:
 #define hudTex      g_ZHudTex
 #define hudLayer32  g_ZHudLayer32
@@ -442,8 +460,9 @@ int main(int argc, char* argv[])
 
 	while (notdone)
 	{
+		ZHUD_EnsureAlive(ren, renderwidth, renderheight);
 		RendererHooks::beginFrame();
-		SDL_FillRect(hudLayer32, NULL, 0x00000000);
+		ZHUD_Clear();
 		if ((state == STATE_PARSING) || (state == STATE_SPOOLING))
 		{
 			std::string scriptstring;
@@ -829,6 +848,9 @@ int main(int argc, char* argv[])
 			renderer.Render(&cam);
 			MapObject pobj = logic.GetPlayerObj();
 			hud.Render(hudLayer32, pobj, smallfont);
+			// Fallback: also draw HUD directly into the main render surface,
+			// so HUD/weapon remain visible even if the HUD overlay path fails.
+			hud.Render(render32, pobj, smallfont);
 			fps++;
 		}
 		if (state == STATE_MENU)
