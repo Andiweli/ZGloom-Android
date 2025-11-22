@@ -1,5 +1,5 @@
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_mixer.h>
+#include <sdl2/SDL.h>
+#include <sdl2/SDL_mixer.h>
 #include "xmp/include/xmp.h"
 #include <atomic>
 #include <cstdint>

@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Gloom Deluxe</string>
+    <string name="install_game_data_hint">Installing game data...\nPlease wait...</string>
 </resources>

@@ -1,10 +1,10 @@
 // zgloom.cpp : Defines the entry point for the console application.
 //
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_mixer.h>
+#include <sdl2/SDL.h>
+#include <sdl2/SDL_mixer.h>
 #ifdef __ANDROID__
-#include <SDL2/SDL_system.h>
+#include <sdl2/SDL_system.h>
 #include <unistd.h>
 #include <errno.h>
 #endif
@@ -35,17 +35,8 @@ static xmp_context g_xmp = nullptr;
 #ifdef __ANDROID__
 static void ConfigureAndroidDataRoot()
 {
-    // 1) Preferred: fixed OUYA-style path /sdcard/ZGloom/
-    const char* fixedRoot = "/sdcard/ZGloom/";
-    if (chdir(fixedRoot) == 0) {
-        Config::SetDataRoot(fixedRoot);
-        SDL_Log("ZGloom: Android DataRoot set to fixed '%s' (chdir OK)", fixedRoot);
-        return;
-    } else {
-        SDL_Log("ZGloom: chdir('%s') failed (errno=%d), falling back to SDL_AndroidGetExternalStoragePath()", fixedRoot, errno);
-    }
-
-    // 2) Fallback: SDL external storage path + "/ZGloom/"
+    // Preferred: app-specific external files dir used by Java installer:
+    //   getExternalFilesDir(null)/ZGloom
     const char* ext = SDL_AndroidGetExternalStoragePath();
     if (ext && *ext) {
         std::string root = std::string(ext);
@@ -75,7 +66,7 @@ static void ConfigureAndroidDataRoot()
 // It provides hudTex/hudLayer32 + helpers, and forward-declares the RendererHooks
 // functions so you don't need to include any new headers here.
 
-// (removed) // #include <SDL.h>
+// (removed) // #include <sdl2/SDL.h>
 
 // RendererHooks forward declarations removed (using included header)
 // Global HUD resources (stay internal to this TU)
@@ -492,6 +483,10 @@ int main(int argc, char* argv[])
 					gmap.SetFlat(scriptstring[0] - '0');
 					break;
 				}
+				case Script::SOP_LOADMAP:
+				case Script::SOP_NOP:
+					// No action needed here in intermission script
+					break;
 				case Script::SOP_TEXT:
 				{
 					 intermissiontext = scriptstring;
@@ -848,9 +843,6 @@ int main(int argc, char* argv[])
 			renderer.Render(&cam);
 			MapObject pobj = logic.GetPlayerObj();
 			hud.Render(hudLayer32, pobj, smallfont);
-			// Fallback: also draw HUD directly into the main render surface,
-			// so HUD/weapon remain visible even if the HUD overlay path fails.
-			hud.Render(render32, pobj, smallfont);
 			fps++;
 		}
 		if (state == STATE_MENU)
@@ -996,7 +988,30 @@ int main(int argc, char* argv[])
 			
 			SDL_UpdateTexture(rendertex, NULL, render32->pixels, render32->pitch);
 			SDL_RenderClear(ren);
-			SDL_RenderCopy(ren, rendertex, NULL, NULL);
+
+			// Compute letterboxed destination rect for world texture
+			int outW = 0, outH = 0;
+			if (SDL_GetRendererOutputSize(ren, &outW, &outH) != 0 || outW <= 0 || outH <= 0)
+			{
+				outW = windowwidth;
+				outH = windowheight;
+			}
+
+			float scaleX = outW / (float)renderwidth;
+			float scaleY = outH / (float)renderheight;
+			float scale = (scaleX < scaleY) ? scaleX : scaleY;
+
+			int dstW = (int)(renderwidth * scale + 0.5f);
+			int dstH = (int)(renderheight * scale + 0.5f);
+
+			SDL_Rect dst;
+			dst.w = dstW;
+			dst.h = dstH;
+			dst.x = (outW - dstW) / 2;
+			dst.y = (outH - dstH) / 2;
+
+			SDL_RenderCopy(ren, rendertex, NULL, &dst);
+
 			SDL_UpdateTexture(hudTex, NULL, hudLayer32->pixels, hudLayer32->pitch);
 			RendererHooks::SetHudTexture(hudTex);
 			RendererHooks::endFramePresent();

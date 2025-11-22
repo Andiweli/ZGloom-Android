@@ -1,5 +1,5 @@
 #pragma once
-#include <SDL2/SDL.h>
+#include <sdl2/SDL.h>
 #include "font.h"
 
 #include <vector>
@@ -58,7 +58,8 @@ private:
         MENUSTATUS_SOUNDOPTIONS,
         MENUSTATUS_CONTROLOPTIONS,
         MENUSTATUS_DISPLAYOPTIONS,
-        MENUSTATUS_CHEATOPTIONS
+        MENUSTATUS_CHEATOPTIONS,
+        MENUSTATUS_EFFECTSOPTIONS
     };
 
     MENUSTATUS status;

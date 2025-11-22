@@ -9,7 +9,7 @@
 #include <sstream>
 #include <algorithm>
 #include <cctype>
-#include <SDL2/SDL.h>
+#include <sdl2/SDL.h>
 
 // ---- Local loader for cheats.txt (no dependency on Cheats::Load) ---------
 static bool g_CheatsLoadedOnce = false;
@@ -78,14 +78,6 @@ static void MenuSetCheatStartWeapon(int idx) { Cheats::SetStartWeapon(idx); Chea
 
 static int MenuGetAtmos() { return EmbeddedBGMVolume::Get(); }
 static void MenuSetAtmos(int v) { EmbeddedBGMVolume::Set(v, true); EmbeddedBGMVolume::Save(); }
-#ifndef MENUSTATUS_CHEATOPTIONS
-#define MENUSTATUS_CHEATOPTIONS 106
-#endif
-#ifndef MENUSTATUS_EFFECTSOPTIONS
-#define MENUSTATUS_EFFECTSOPTIONS 107
-#endif
-
-
 // ---- Vignette Warmth Bool Mapping (ON=WARM, OFF=COLD) ----------------------
 static int MenuGetVignetteWarmthBool() {
     int v = MenuAdapters::GetWarmth01();
@@ -183,7 +175,7 @@ void MenuScreen::Render(SDL_Surface* src, SDL_Surface* dest, Font& font)
         effectsmenu.push_back(MenuEntry("SCANLINE INTENSITY: ", ACTION_INT, 6, Config::GetScanlineIntensity, Config::SetScanlineIntensity));
         DisplayStandardMenu(effectsmenu, flash, scale, dest, font);
     }
-else if (status == MENUSTATUS_CHEATOPTIONS)
+    else if (status == MENUSTATUS_CHEATOPTIONS)
     {
         static std::vector<MenuEntry> cheatmenu;
         cheatmenu.clear();
@@ -450,7 +442,7 @@ MenuScreen::MenuReturn MenuScreen::Update(SDL_Event& tevent)
                 HandleStandardMenu(tevent.key.keysym.sym, effectsmenu);
                 break;
             }
-case MENUSTATUS_CHEATOPTIONS:
+            case MENUSTATUS_CHEATOPTIONS:
             {
                 static std::vector<MenuEntry> cheatmenu;
                 cheatmenu.clear();
@@ -609,6 +601,3 @@ void MenuScreen::DisplayStandardMenu(std::vector<MenuEntry>& menu, bool flash, i
         }
     }
 }
-
-// Added by EmbeddedBGM integration
-#include "audio/AtmosphereVolume.h"

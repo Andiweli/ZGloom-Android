@@ -1,5 +1,5 @@
 #include "RendererHooks.h"
-#include <SDL2/SDL.h>
+#include <sdl2/SDL.h>
 #include <vector>
 #include <cmath>
 #include "../config.h"

@@ -1,7 +1,7 @@
 #pragma once
 
 
-#include <SDL2/SDL.h>
+#include <sdl2/SDL.h>
 #include <vector>
 #include <string>
 #include "gloommap.h"

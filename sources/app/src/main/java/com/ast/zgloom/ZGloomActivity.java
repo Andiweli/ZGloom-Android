@@ -65,7 +65,7 @@ public class ZGloomActivity extends SDLActivity {
                         return;
                     }
                     mInstallHintView = new TextView(ZGloomActivity.this);
-                    mInstallHintView.setText("Installing Game Data. Please wait...");
+                    mInstallHintView.setText(getString(R.string.install_game_data_hint));
                     mInstallHintView.setTextColor(0xFFFFFFFF);
                     mInstallHintView.setTextSize(18);
                     mInstallHintView.setGravity(Gravity.CENTER);

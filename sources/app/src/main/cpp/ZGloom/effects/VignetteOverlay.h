@@ -1,5 +1,5 @@
 #pragma once
-#include <SDL2/SDL.h>
+#include <sdl2/SDL.h>
 
 // Fast vignette + tint overlay (CPU), optimized for Vita.
 // - Generates a HALF-RES texture and scales to screen -> ~4x fewer pixels to compute.

@@ -6,7 +6,7 @@
 #include "xmp/include/xmp.h"
 
 //just for controller defines
-#include <SDL2/SDL.h>
+#include <sdl2/SDL.h>
 
 namespace Config
 {

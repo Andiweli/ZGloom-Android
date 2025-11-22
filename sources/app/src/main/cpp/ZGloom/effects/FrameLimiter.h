@@ -1,6 +1,6 @@
 #pragma once
 #include <stdint.h>
-#include <SDL2/SDL.h>
+#include <sdl2/SDL.h>
 
 // Simple 60 FPS limiter using SDL high-resolution timer.
 // Call FrameLimiter::beginFrame() at the start of your frame and

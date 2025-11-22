@@ -1,5 +1,5 @@
 #pragma once
-#include <SDL2/SDL.h>
+#include <sdl2/SDL.h>
 
 // Queue a lens flare using RENDER-SPACE coords (x,y in offscreen)
 // NOTE: Lens flare removed; API kept as no-op for compatibility.

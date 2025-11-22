@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <math.h>
-#include <SDL2/SDL.h>
+#include <sdl2/SDL.h>
 #include "config.h"
 #include "ConfigOverlays.h"
 
