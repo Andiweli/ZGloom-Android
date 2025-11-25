@@ -25,6 +25,9 @@ It is based on the [Windows ZGloom fork](https://github.com/Andiweli/ZGloomX86) 
 - **Dynamic muzzle flash & projectile reflections**  
   Each shot briefly brightens the scene, and colored reflection ellipses are drawn under projectiles and weapon upgrade orbs, matching weapon type and upgrade level.
 
+- **Save/Load position option**  
+  Saves your position in the game as well as weapon and ammo.
+
 ---
 
 ## 🖼️ Screenshots
