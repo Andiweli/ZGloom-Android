@@ -121,3 +121,23 @@ void Script::GetLevelNames(std::vector<std::string>& names)
 		}
 	}
 }
+
+void Script::SeekAfterPlayFor(const std::string& levelName)
+{
+    for (uint32_t i = 0; i < lines.size(); ++i)
+    {
+        const std::string& s = lines[i];
+
+        if (s.size() > 5 && s.compare(0, 5, "play_") == 0)
+        {
+            std::string name = s.substr(5);
+            if (name == levelName)
+            {
+                // continue parsing after this play_ line
+                line = i + 1;
+                return;
+            }
+        }
+    }
+}
+

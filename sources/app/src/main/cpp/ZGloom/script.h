@@ -31,6 +31,7 @@ class Script
 
 		ScriptOp NextLine(std::string& name);
 		void GetLevelNames(std::vector<std::string>& names);
+		void SeekAfterPlayFor(const std::string& levelName);
 
 	private:
 		uint32_t line = 0;

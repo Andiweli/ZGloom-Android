@@ -11,6 +11,9 @@
 #include <cctype>
 #include <sdl2/SDL.h>
 
+// In-game save hook (handled in zgloom.cpp)
+extern bool g_RequestSavePosition;
+
 // ---- Local loader for cheats.txt (no dependency on Cheats::Load) ---------
 static bool g_CheatsLoadedOnce = false;
 
@@ -233,6 +236,7 @@ MenuScreen::MenuScreen()
     // MAIN
     mainmenu.push_back(MenuEntry("MAIN MENU", ACTION_LABEL, 0, nullptr, nullptr));
     mainmenu.push_back(MenuEntry("CONTINUE", ACTION_RETURN, MENURET_PLAY, nullptr, nullptr));
+	mainmenu.push_back(MenuEntry("SAVE POSITION", ACTION_RETURN, -100, nullptr, nullptr));
     mainmenu.push_back(MenuEntry("CONTROL OPTIONS", ACTION_SWITCHMENU, MENUSTATUS_CONTROLOPTIONS, nullptr, nullptr));
     mainmenu.push_back(MenuEntry("SOUND OPTIONS", ACTION_SWITCHMENU, MENUSTATUS_SOUNDOPTIONS, nullptr, nullptr));
     mainmenu.push_back(MenuEntry("DISPLAY OPTIONS", ACTION_SWITCHMENU, MENUSTATUS_DISPLAYOPTIONS, nullptr, nullptr));
@@ -347,10 +351,14 @@ MenuScreen::MenuReturn MenuScreen::HandleStandardMenu(SDL_Keycode sym, std::vect
                 }
                 case ACTION_RETURN:
                 {
+                    if (e.arg == -100)
+                    {
+                        g_RequestSavePosition = true;
+                        // Nach dem Speichern direkt ins Spiel zurückkehren
+                        return MENURET_PLAY;
+                    }
                     return (MenuReturn)e.arg;
                 }
-                default:
-                    break;
             }
             break;
         }
@@ -520,6 +528,7 @@ void MenuScreen::DisplayStandardMenu(std::vector<MenuEntry>& menu, bool flash, i
 
         // Restore old half-line spacing before certain entries
         if (e.name == "QUIT TO TITLE" ||
+            e.name == "CONTROL OPTIONS" ||
             e.name == "ATMOSPHERIC VIGNETTE: " ||
             e.name == "FILM GRAIN: " ||
             e.name == "SCANLINES: ")

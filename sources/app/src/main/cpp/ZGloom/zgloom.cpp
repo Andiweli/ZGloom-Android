@@ -24,6 +24,9 @@ static xmp_context g_xmp = nullptr;
 #include "audio/AtmosphereVolume.h"
 #include "objectgraphics.h"
 #include <iostream>
+#include "SaveSystem.h"
+#include "EventReplay.h"
+
 #include "gamelogic.h"
 #include "soundhandler.h"
 #include "font.h"
@@ -235,6 +238,9 @@ enum GameState
 	STATE_TITLE
 };
 
+
+bool g_RequestSavePosition = false;
+bool g_RequestTitleContinue = false;
 
 int main(int argc, char* argv[])
 {
@@ -480,7 +486,9 @@ int main(int argc, char* argv[])
 				case Script::SOP_LOADFLAT:
 				{
 					//improve this, only supports 9 flats
-					gmap.SetFlat(scriptstring[0] - '0');
+					int flat = scriptstring[0] - '0';
+					gmap.SetFlat(flat);
+					SaveSystem::SetCurrentFlat(flat);
 					break;
 				}
 				case Script::SOP_LOADMAP:
@@ -556,16 +564,79 @@ int main(int argc, char* argv[])
 					if (state == STATE_PARSING)
 					{
 
-						cam.x.SetInt(0);
-						cam.y = 120;
-						cam.z.SetInt(0);
-						cam.rotquick.SetInt(0);
-						scriptstring.insert(0, Config::GetLevelDir());
-						gmap.Load(scriptstring.c_str(), &objgraphics);
-						//gmap.Load("maps/map1_4", &objgraphics);
-						renderer.Init(render32, &gmap, &objgraphics);
-						logic.InitLevel(&gmap, &cam, &objgraphics);
-						state = STATE_PLAYING;
+					// Determine which level to load: script default or saved position
+					std::string levelRel = scriptstring;
+					SaveSystem::SaveData s;
+					bool haveSavePos = false;
+					bool haveReplay  = false;
+
+					// For each new PLAY operation we start from a clean event history
+					EventReplay::Clear();
+
+					if (g_RequestTitleContinue)
+					{
+						g_RequestTitleContinue = false;
+						if (SaveSystem::LoadFromDisk(s))
+						{
+							levelRel    = s.levelPath;
+							haveSavePos = true;
+							SaveSystem::SetCurrentFlat(s.flatIndex);
+							script.SeekAfterPlayFor(levelRel);
+
+							// EventReplay: load stored event history for this save
+							if (EventReplay::LoadFromDisk())
+								haveReplay = true;
+						}
+					}
+
+					// Remember level path (relative) for save/resume
+					SaveSystem::SetCurrentLevelPath(levelRel);
+
+					// Default camera for new game; may be overridden by saved data
+					cam.x.SetInt(0);
+					cam.y = 120;
+					cam.z.SetInt(0);
+					cam.rotquick.SetInt(0);
+
+					// Build full path and load requested level
+					std::string levelFull = levelRel;
+					levelFull.insert(0, Config::GetLevelDir());
+					gmap.Load(levelFull.c_str(), &objgraphics);
+					//gmap.Load("maps/map1_4", &objgraphics);
+					renderer.Init(render32, &gmap, &objgraphics);
+					logic.InitLevel(&gmap, &cam, &objgraphics);
+
+					// EventReplay: after the map is fully initialised, restore button/door state
+					if (haveReplay)
+					{
+						EventReplay::ReplayAll(gmap);
+					}
+
+					// If we continue from a save, restore camera and player state
+					if (haveSavePos)
+					{
+						cam.x.SetInt(s.camX);
+						cam.y = s.camY;
+						cam.z.SetInt(s.camZ);
+						cam.rotquick.SetInt(s.camRot);
+
+						// Restore player stats (HP, weapon, reload state)
+						for (auto& o : gmap.GetMapObjects())
+						{
+							if (o.t == ObjectGraphics::OLT_PLAYER1)
+							{
+								o.data.ms.hitpoints = s.hp;
+								o.data.ms.weapon    = s.weapon;
+								o.data.ms.reload    = s.reload;
+								o.data.ms.reloadcnt = s.reloadcnt;
+								break;
+							}
+						}
+					}
+
+
+					state = STATE_PLAYING;
+
 
 						// Start embedded atmosphere BGM for each level (Vita-style)
 						BGM::PlayLooping();
@@ -741,7 +812,33 @@ int main(int argc, char* argv[])
 				}
 				if (state == STATE_MENU)
 				{
-					switch (menuscreen.Update(sEvent))
+					MenuScreen::MenuReturn mr = menuscreen.Update(sEvent);
+
+					if (g_RequestSavePosition)
+					{
+						g_RequestSavePosition = false;
+						SaveSystem::SaveData s;
+						s.levelPath = SaveSystem::GetCurrentLevelPath();
+						s.flatIndex = SaveSystem::GetCurrentFlat();
+						s.camX = cam.x.GetInt();
+						s.camY = cam.y;
+						s.camZ = cam.z.GetInt();
+						s.camRot = cam.rotquick.GetInt();
+
+						// Capture current player state for save/resume
+						MapObject player = logic.GetPlayerObj();
+
+						s.hp        = player.data.ms.hitpoints;
+						s.weapon    = player.data.ms.weapon;
+						s.reload    = player.data.ms.reload;
+						s.reloadcnt = player.data.ms.reloadcnt;
+
+						SaveSystem::SaveToDisk(s);
+						EventReplay::SaveToDisk();
+						SDL_Log("ZGloom SaveSystem: SAVE requested (level=%s, weapon=%d, reload=%d)", s.levelPath.c_str(), s.weapon, s.reload);
+					}
+
+					switch (mr)
 					{
 						case MenuScreen::MENURET_PLAY:
 							state = STATE_PLAYING;

@@ -2,6 +2,9 @@
 #include "gloommaths.h"
 #include "monsterlogic.h"
 #include "soundhandler.h"
+#include "SaveSystem.h"
+#include "EventReplay.h"
+
 
 static uint16_t Get16(const uint8_t* p)
 {
@@ -453,6 +456,9 @@ void GloomMap::SetFlat(char f)
 	name += f + '0';
 
 	ceil.Load(name.c_str());
+
+	// Remember current flat index for Save/Load (store as integer)
+	SaveSystem::SetCurrentFlat((int)f);
 	return;
 }
 
@@ -543,6 +549,8 @@ void GloomMap::DumpDebug()
 
 void GloomMap::ExecuteEvent(uint32_t e, bool& gotele, Teleport& teleout)
 {
+	// Record event for Vita-style replay after load
+	EventReplay::Record(e);
 	// add objects?
 	
 	// DEMOS events seem off by one? 
