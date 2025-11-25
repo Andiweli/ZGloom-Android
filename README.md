@@ -1,8 +1,13 @@
-# ZGloom-Android <br/>Amiga Gloom engine for Android & OUYA
+# ZGloom-Android<br/>Amiga Gloom engine for Android & OUYA
 
-ZGloom-Android is an Android port of the modern **ZGloom** engine, bringing the classic Amiga FPS **Gloom** (plus Gloom Deluxe, Gloom 3 and Zombie Massacre) to Android devices and the OUYA micro-console.
+> Android / OUYA port of the modern ZGloom engine, bringing the classic Amiga FPS **Gloom** (plus Gloom Deluxe, Gloom 3 and Zombie Massacre) to Android-based systems.
 
-This project is based on the [Windows ZGloom fork](https://github.com/Andiweli/ZGloom) and adapts the renderer and game logic for Android (SDL2 + native C++).
+[![Latest release](https://img.shields.io/github/v/release/andiweli/ZGloom-Android?label=latest%20Android%20release)](https://github.com/andiweli/ZGloom-Android/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-Android%20%2F%20OUYA-orange.svg)](https://github.com/andiweli/ZGloom-Android)
+[![Engine](https://img.shields.io/badge/engine-SDL2%20%2B%20native%20C%2B%2B-brightgreen.svg)](https://github.com/andiweli/ZGloom-Android)
+
+ZGloom-Android is an Android port of the modern **ZGloom** engine, focused mainly on **OUYA** and Android TV-style devices with a gamepad.  
+It is based on the [Windows ZGloom fork](https://github.com/Andiweli/ZGloomX86) and adapts the renderer and game logic for Android (SDL2 + native C++).
 
 ---
 
@@ -20,21 +25,11 @@ This project is based on the [Windows ZGloom fork](https://github.com/Andiweli/Z
 - **Dynamic muzzle flash & projectile reflections**  
   Each shot briefly brightens the scene, and colored reflection ellipses are drawn under projectiles and weapon upgrade orbs, matching weapon type and upgrade level.
 
-> Note: ZGloom-Android is under active development. Not all features from the Windows port are available in every test build yet.
-
-<img width="1280" height="1440" alt="image" src="https://github.com/user-attachments/assets/a5414fd4-56f8-4db9-97b3-ca781fd41e31" />
-
-
 ---
 
-## 📦 Status
+## 🖼️ Screenshots
 
-ZGloom-Android is currently in **early development / testing**:
-
-- Focus: OUYA and Android TV-style devices with a gamepad  
-- Touch controls are not in the scope of this Port  
-
-Check the **Releases** section for test builds once they become available.
+<img width="1280" height="1440" alt="image" src="https://github.com/user-attachments/assets/a5414fd4-56f8-4db9-97b3-ca781fd41e31" />
 
 ---
 
