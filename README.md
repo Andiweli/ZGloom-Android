@@ -6,7 +6,7 @@ Android / OUYA port of the modern **ZGloom** engine, bringing the classic Amiga 
 
 [![Latest release](https://img.shields.io/github/v/release/andiweli/ZGloom-Android?label=latest%20release)](https://github.com/andiweli/ZGloom-Android/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Android%20(OUYA)-blue.svg)](https://github.com/andiweli/ZGloom-Android)
-[![Engine](https://img.shields.io/badge/engine-sdl%20software%20renderer-brightgreen.svg)](https://github.com/andiweli/ZGloom-Android)
+[![Engine](https://img.shields.io/badge/engine-SDL2%20%2B%20LibXMP-brightgreen.svg)](https://github.com/andiweli/ZGloom-Android)
 
 ZGloom-Android is part of a family of cross-platform Gloom source ports that share the same renderer, options and feature set across desktop and console-style systems. This edition targets Android-based hardware such as the OUYA micro-console and Android TV boxes, with a focus on couch play using a controller.
 
