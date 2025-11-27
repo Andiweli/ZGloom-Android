@@ -4,11 +4,16 @@ Android / OUYA port of the modern **ZGloom** engine, bringing the classic Amiga 
 
 > Play Gloom, Gloom Deluxe, Gloom 3 and Zombie Massacre on Android and OUYA with a fixed renderer, widescreen support, post-processing overlays and save/load position – while staying faithful to the original Amiga gameplay.
 
+[![Latest release](https://img.shields.io/github/v/release/andiweli/ZGloom-Android?label=latest%20release)](https://github.com/andiweli/ZGloom-Android/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-Android%20(OUYA)-blue.svg)](https://github.com/andiweli/ZGloom-Android)
+[![Engine](https://img.shields.io/badge/engine-sdl%20software%20renderer-brightgreen.svg)](https://github.com/andiweli/ZGloom-Android)
+
 ZGloom-Android is part of a family of cross-platform Gloom source ports that share the same renderer, options and feature set across desktop and console-style systems. This edition targets Android-based hardware such as the OUYA micro-console and Android TV boxes, with a focus on couch play using a controller.
 
 For other platforms, see the companion projects [ZGloom-x86 (Windows)](https://github.com/Andiweli/ZGloom-x86), [ZGloom-Vita-Vita2D (PS Vita / PSTV)](https://github.com/Andiweli/ZGloom-Vita-Vita2D) and [ZGloom-macOS](https://github.com/Andiweli/ZGloom-macOS).
 
-* * *
+---
+
 ## ✨ Key Features
 
 - Modern source port of the Amiga Gloom engine  
@@ -34,15 +39,17 @@ For other platforms, see the companion projects [ZGloom-x86 (Windows)](https://g
 
 ---
 
-## 🖼️ Screenshots
+## 🖼️ Screenshots and Video
 
-<img width="1280" height="1440" alt="image" src="https://github.com/user-attachments/assets/a5414fd4-56f8-4db9-97b3-ca781fd41e31" />
+https://github.com/user-attachments/assets/6a16865d-d990-4e9c-aaa1-b48a14ab7d9e
+
+<img width="1280" height="1440" alt="Gloom-Screenshots" src="https://github.com/user-attachments/assets/617ad5bb-8bb4-4449-a830-a730fda007ef" />
 
 ---
 
 ## 🚀 Getting Started
 
-1. Install the ZGloom-Android `.apk` on your Android device or OUYA.
+1. Install the ZGloom-Android `.apk` on your Android device or OUYA (gamedata is included and will be installed upon first start).
 2. Launch ZGloom-Android.
 
 ---
@@ -72,4 +79,4 @@ ZGloom-Android aims to bring the enhanced **ZGloom** experience to Android and O
 - modernized renderer and visual tweaks  
 - support for multiple Gloom-based games and selected mods  
 - console-style controls and TV-friendly presentation
-- background ambience by Prophet
+- background ambience credit goes to Prophet
