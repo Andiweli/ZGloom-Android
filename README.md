@@ -1,32 +1,36 @@
-# ZGloom-Android<br/>Amiga Gloom engine for Android & OUYA
+# ZGloom-Android – Amiga Gloom port for Android & OUYA
 
-> Android / OUYA port of the modern ZGloom engine, bringing the classic Amiga FPS **Gloom** (plus Gloom Deluxe, Gloom 3 and Zombie Massacre) to Android-based systems.
+Android / OUYA port of the modern **ZGloom** engine, bringing the classic Amiga FPS **Gloom** and its successors to gamepad-driven Android devices.  
 
-[![Latest release](https://img.shields.io/github/v/release/andiweli/ZGloom-Android?label=latest%20Android%20release)](https://github.com/andiweli/ZGloom-Android/releases/latest)
-[![Platform](https://img.shields.io/badge/platform-Android%20%2F%20OUYA-orange.svg)](https://github.com/andiweli/ZGloom-Android)
-[![Engine](https://img.shields.io/badge/engine-SDL2%20%2B%20native%20C%2B%2B-brightgreen.svg)](https://github.com/andiweli/ZGloom-Android)
+> Play Gloom, Gloom Deluxe, Gloom 3 and Zombie Massacre on Android and OUYA with a fixed renderer, widescreen support, post-processing overlays and save/load position – while staying faithful to the original Amiga gameplay.
 
-ZGloom-Android is an Android port of the modern **ZGloom** engine, focused mainly on **OUYA** and Android TV-style devices with a gamepad.  
-It is based on the [Windows ZGloom fork](https://github.com/Andiweli/ZGloomX86) and adapts the renderer and game logic for Android (SDL2 + native C++).
+ZGloom-Android is part of a family of cross-platform Gloom source ports that share the same renderer, options and feature set across desktop and console-style systems. This edition targets Android-based hardware such as the OUYA micro-console and Android TV boxes, with a focus on couch play using a controller.
 
----
+For other platforms, see the companion projects [ZGloom-x86 (Windows)](https://github.com/Andiweli/ZGloom-x86), [ZGloom-Vita-Vita2D (PS Vita / PSTV)](https://github.com/Andiweli/ZGloom-Vita-Vita2D) and [ZGloom-macOS](https://github.com/Andiweli/ZGloom-macOS).
 
+* * *
 ## ✨ Key Features
 
-- **Android port of the Amiga Gloom engine**  
-  Runs the original Gloom data files on Android / OUYA using a native C++ core.
+- Modern source port of the Amiga Gloom engine  
+  Runs the original Gloom data files on Android devices (with a focus on OUYA and Android TV-style boxes) using the modern ZGloom C++ engine.
 
-- **4:3 and 16:9 display modes with FOV control**  
-  Switch between the classic 4:3 look and a widescreen 16:9 mode and adjust the field of view to match your TV or display.
+- Supports multiple official games  
+  Play **Gloom**, **Gloom Deluxe / Ultimate Gloom**, **Gloom 3** and **Zombie Massacre** (plus selected mods where available).
 
-- **Improved software renderer**  
-  Uses the updated ZGloom renderer with cleaner perspective, fewer glitches and subtle visual polish.
+- Built-in multi-game launcher  
+  If more than one game or mod is present, a simple launcher lets you pick what to play at startup.
 
-- **Dynamic muzzle flash & projectile reflections**  
-  Each shot briefly brightens the scene, and colored reflection ellipses are drawn under projectiles and weapon upgrade orbs, matching weapon type and upgrade level.
+- 4:3 and 16:9 display modes with FOV control  
+  Switch between the classic 4:3 Amiga look and a widescreen 16:9 mode and adjust the field of view to match your TV or monitor.
 
-- **Save/Load position option**  
-  Saves your position in the game as well as weapon and ammo.
+- Improved renderer, lighting and effects  
+  Uses the fixed ZGloom renderer with cleaner perspective, fewer glitches and subtle lighting tweaks, including dynamic muzzle flashes and colored floor reflections under projectiles and weapon upgrade orbs.
+
+- Atmospheric post-processing overlays (optional)  
+  Enable vignette, film grain and scanlines for a more gritty, CRT-style presentation without changing gameplay.
+
+- Save/Load position and extended options  
+  Save your in-level position (including health, weapon and ammo state) and tweak many more options than in the original Amiga release.
 
 ---
 
