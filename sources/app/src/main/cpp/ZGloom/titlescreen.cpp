@@ -21,20 +21,20 @@ void TitleScreen::Render(SDL_Surface* src, SDL_Surface* dest, Font& font)
 			// With save: show RESUME above START NEW GAME
 			if (flash || (selection != MAINENTRY_RESUME)) font.PrintMessage("RESUME SAVED POSITION", 150, dest, 1);
 			if (flash || (selection != MAINENTRY_PLAY))   font.PrintMessage("START NEW GAME", 165, dest, 1);
-			if (flash || (selection != MAINENTRY_SELECT)) font.PrintMessage("LEVEL SELECT", 180, dest, 1);
-			if (flash || (selection != MAINENTRY_ABOUT))  font.PrintMessage("ABOUT GLOOM", 195, dest, 1);
-			if (flash || (selection != MAINENTRY_QUIT))   font.PrintMessage("EXIT GAME", 210, dest, 1);
+			if (flash || (selection != MAINENTRY_SELECT)) font.PrintMessage("SELECT LEVEL", 180, dest, 1);
+			if (flash || (selection != MAINENTRY_ABOUT))  font.PrintMessage("ABOUT GLOOM AND THIS PORT", 195, dest, 1);
+			if (flash || (selection != MAINENTRY_QUIT))   font.PrintMessage("EXIT", 210, dest, 1);
 		}
 		else
 		{
 			// Without save: classic 4-entry menu
 			if (flash || (selection != MAINENTRY_PLAY))   font.PrintMessage("START NEW GAME", 160, dest, 1);
-			if (flash || (selection != MAINENTRY_SELECT)) font.PrintMessage("LEVEL SELECT", 175, dest, 1);
-			if (flash || (selection != MAINENTRY_ABOUT))  font.PrintMessage("ABOUT GLOOM", 190, dest, 1);
-			if (flash || (selection != MAINENTRY_QUIT))   font.PrintMessage("EXIT GAME", 205, dest, 1);
+			if (flash || (selection != MAINENTRY_SELECT)) font.PrintMessage("SELECT LEVEL", 175, dest, 1);
+			if (flash || (selection != MAINENTRY_ABOUT))  font.PrintMessage("ABOUT GLOOM AND THIS PORT", 190, dest, 1);
+			if (flash || (selection != MAINENTRY_QUIT))   font.PrintMessage("EXIT", 205, dest, 1);
 		}
 
-		font.PrintMessage("ZGLOOM ENGINE OUYA 11.2025", 243, dest, 1);
+		font.PrintMessage("ZGLOOM ANDROID 11.2025", 243, dest, 1);
 	}
 	else if (status == TITLESTATUS_SELECT)
 	{
@@ -58,26 +58,24 @@ void TitleScreen::Render(SDL_Surface* src, SDL_Surface* dest, Font& font)
 	}
 	else
 	{
-		font.PrintMessage("GLOOM ENGINE", 30, dest, 1);
-		font.PrintMessage("BY BLACK MAGIC", 40, dest, 1);
+		font.PrintMessage("GLOOM BLACK MAGIC ENGINE", 40, dest, 1);
+		font.PrintMessage("BY BLACK MAGIC", 50, dest, 1);
 
-		font.PrintMessage("PROGRAMMED BY MARK SIBLY", 55, dest, 1);
-		font.PrintMessage("GRAPHICS BY THE BUTLER BROTHERS", 65, dest, 1);
-		font.PrintMessage("MUSIC BY KEV STANNARD", 75, dest, 1);
-		font.PrintMessage("AUDIO BY BLACK MAGIC", 85, dest, 1);
-		
-		font.PrintMessage("CODED IN DEVPAC2", 100, dest, 1);
-		font.PrintMessage("UTILITIES CODED IN BLITZ BASIC 2", 110, dest, 1);
-		font.PrintMessage("RENDERED IN DPAINT3 AND DPAINT4", 120, dest, 1);
-		font.PrintMessage("DECRUNCHCODE BY THOMAS SCHWARZ", 130, dest, 1);
+		font.PrintMessage("PROGRAMMED BY MARK SIBLY", 65, dest, 1);
+		font.PrintMessage("GRAPHICS BY THE BUTLER BROTHERS", 75, dest, 1);
+		font.PrintMessage("MUSIC BY KEV STANNARD", 85, dest, 1);
+		font.PrintMessage("AUDIO BY BLACK MAGIC", 95, dest, 1);
+		font.PrintMessage("DECRUNCHCODE BY THOMAS SCHWARZ", 105, dest, 1);
 
-		font.PrintMessage("GLOOM3 AND ZOMBIE MASSACRE", 145, dest, 1);
-		font.PrintMessage("BY ALPHA SOFTWARE", 155, dest, 1);
+		font.PrintMessage("GLOOM3 AND ZOMBIE MASSACRE", 120, dest, 1);
+		font.PrintMessage("BY ALPHA SOFTWARE", 130, dest, 1);
 
-		font.PrintMessage("ABOUT THIS PORT", 175, dest, 1);
-		font.PrintMessage("CODE AND ADDITIONAL EXTRAS", 190, dest, 1);
-		font.PrintMessage("BY ANDIWELI", 200, dest, 1);
-		font.PrintMessage("BASED ON X86 PORT", 215, dest, 1);
+		font.PrintMessage("ABOUT THIS PORT", 145, dest, 1);
+		font.PrintMessage("CODE AND FIXES BY ANDIWELI", 160, dest, 1);
+		font.PrintMessage("AMBIENCE BY PROPHET", 170, dest, 1);
+		font.PrintMessage("BASED ON PORT BY SWIZPIG", 185, dest, 1);
+
+		font.PrintMessage("IN HONOR AND MEMORY OF MARK SIBLY", 200, dest, 1);
 	}
 }
 
