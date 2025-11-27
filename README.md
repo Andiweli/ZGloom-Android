@@ -39,7 +39,7 @@ For other platforms, see the companion projects [ZGloom-x86 (Windows)](https://g
 
 ---
 
-## 🖼️ Screenshots and Video
+## 🖼️ Gameplay-Video and Screenshots
 
 https://github.com/user-attachments/assets/6a16865d-d990-4e9c-aaa1-b48a14ab7d9e
 
