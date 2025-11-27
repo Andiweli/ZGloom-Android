@@ -1,11 +1,11 @@
 # ZGloom-Android - Amiga Gloom port for Android & OUYA
 
-Android / OUYA port of the modern **ZGloom** engine, bringing the classic Amiga FPS **Gloom** and its successors to gamepad-driven Android devices.  
+Android / OUYA / Logitech G-Cloud port of the modern **ZGloom** engine, bringing the classic Amiga FPS **Gloom** and its successors to **gamepad-driven** Android devices.  
 
 > Play Gloom, Gloom Deluxe, Gloom 3 and Zombie Massacre on Android and OUYA with a fixed renderer, widescreen support, post-processing overlays and save/load position – while staying faithful to the original Amiga gameplay.
 
 [![Latest release](https://img.shields.io/github/v/release/andiweli/ZGloom-Android?label=latest%20release)](https://github.com/andiweli/ZGloom-Android/releases/latest)
-[![Platform](https://img.shields.io/badge/platform-Android%20(OUYA)-blue.svg)](https://github.com/andiweli/ZGloom-Android)
+[![Platform](https://img.shields.io/badge/platform-Android%20(Controller)-blue.svg)](https://github.com/andiweli/ZGloom-Android)
 [![Engine](https://img.shields.io/badge/engine-SDL2%20%2B%20LibXMP-brightgreen.svg)](https://github.com/andiweli/ZGloom-Android)
 
 ZGloom-Android is part of a family of cross-platform Gloom source ports that share the same renderer, options and feature set across desktop and console-style systems. This edition targets Android-based hardware such as the OUYA micro-console and Android TV boxes, with a focus on couch play using a controller.
@@ -93,3 +93,8 @@ ZGloom-Android aims to bring the enhanced **ZGloom** experience to Android and O
 - support for multiple Gloom-based games and selected mods  
 - console-style controls and TV-friendly presentation
 - background ambience credit goes to Prophet
+  
+**Keywords / Topics:**  
+_amiga • gloom • vita • psvita • windows • x86 • android • macos • homebrew • zgloom • gloomdeluxe • zombiemassacre • sdl • libxmp • vita2d • ps tv shooter_
+
+If you enjoy it, feel free to ⭐ star the repo so other PS Vita & Amiga fans can find it more easily.
