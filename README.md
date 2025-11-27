@@ -1,4 +1,4 @@
-# ZGloom-Android – Amiga Gloom port for Android & OUYA
+# ZGloom-Android - Amiga Gloom port for Android & OUYA
 
 Android / OUYA port of the modern **ZGloom** engine, bringing the classic Amiga FPS **Gloom** and its successors to gamepad-driven Android devices.  
 
@@ -11,6 +11,19 @@ Android / OUYA port of the modern **ZGloom** engine, bringing the classic Amiga 
 ZGloom-Android is part of a family of cross-platform Gloom source ports that share the same renderer, options and feature set across desktop and console-style systems. This edition targets Android-based hardware such as the OUYA micro-console and Android TV boxes, with a focus on couch play using a controller.
 
 For other platforms, see the companion projects [ZGloom-x86 (Windows)](https://github.com/Andiweli/ZGloom-x86), [ZGloom-Vita-Vita2D (PS Vita / PSTV)](https://github.com/Andiweli/ZGloom-Vita-Vita2D) and [ZGloom-macOS](https://github.com/Andiweli/ZGloom-macOS).
+
+---
+
+## 🕹 What is Gloom?
+
+[Gloom](https://en.wikipedia.org/wiki/Gloom_(video_game)) was a 1995 Doom-like first-person shooter from **Black Magic Software** for the Commodore Amiga. It featured very messy and meaty graphics and required a powerful Amiga at the time (an A1200 with 030 CPU was still on the low end). The engine later powered several related games and successors, including:
+
+- **Gloom Deluxe / Ultimate Gloom** – enhanced graphics and effects  
+- **Gloom 3**  
+- **Zombie Massacre**  
+- Various full-game conversions of other 90’s Amiga titles
+
+ZGloom is a modern reimplementation of this engine.
 
 ---
 
