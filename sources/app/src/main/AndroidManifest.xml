@@ -20,6 +20,7 @@
         <!-- SDL-based main activity for ZGloom -->
         <activity
             android:name=".ZGloomActivity"
+            android:exported="true"
             android:screenOrientation="landscape"
             android:launchMode="singleTask"
             android:label="@string/app_name">

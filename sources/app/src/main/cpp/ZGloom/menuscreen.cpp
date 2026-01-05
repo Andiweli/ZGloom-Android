@@ -359,6 +359,10 @@ MenuScreen::MenuReturn MenuScreen::HandleStandardMenu(SDL_Keycode sym, std::vect
                     }
                     return (MenuReturn)e.arg;
                 }
+
+                case ACTION_LABEL:
+                    // Label/Überschrift -> keine Aktion ausführen
+                    break;
             }
             break;
         }
