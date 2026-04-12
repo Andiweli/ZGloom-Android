@@ -42,7 +42,7 @@ ZGloom is a modern reimplementation of this engine.
   Switch between the classic 4:3 Amiga look and a widescreen 16:9 mode and adjust the field of view to match your TV or monitor.
 
 - Improved renderer, lighting and effects  
-  Uses the fixed ZGloom renderer with cleaner perspective, fewer glitches and subtle lighting tweaks, including dynamic muzzle flashes and colored floor reflections under projectiles and weapon upgrade orbs.
+  Uses the fixed ZGloom renderer with cleaner perspective, fewer glitches and subtle lighting tweaks, including dust particles, dynamic muzzle flashes and colored floor reflections under projectiles and weapon upgrade orbs.
 
 - Atmospheric post-processing overlays (optional)  
   Enable vignette, film grain and scanlines for a more gritty, CRT-style presentation without changing gameplay.
