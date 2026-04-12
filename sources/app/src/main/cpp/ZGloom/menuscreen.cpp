@@ -95,6 +95,13 @@ static void MenuSetVignetteWarmthBool(int on) {
 static int MenuGetBlobShadows() { return ZGloomPC::gBlobShadows ? 1 : 0; }
 static void MenuSetBlobShadows(int on) { ZGloomPC::gBlobShadows = (on != 0); }
 
+// ---- Atmospheric Dust toggle glue -----------------------------------------
+static int MenuGetAtmosphericDust() { return Config::GetDustEnabled(); }
+static void MenuSetAtmosphericDust(int on)
+{
+    Config::SetDustEnabled(on != 0);
+    Config::Save();
+}
 
 // ---- Display aspect glue (4:3 vs 16:9) ------------------------------------
 static int MenuGetDisplayAspect() { return Config::GetDisplayAspect(); }
@@ -166,6 +173,7 @@ void MenuScreen::Render(SDL_Surface* src, SDL_Surface* dest, Font& font)
         effectsmenu.push_back(MenuEntry("RETURN", ACTION_SWITCHMENU, MENUSTATUS_MAIN, nullptr, nullptr));
         effectsmenu.push_back(MenuEntry("BLOOD SIZE: ", ACTION_INT, 5, Config::GetBlood, Config::SetBlood));
         effectsmenu.push_back(MenuEntry("MUZZLE FLASH AND REFLECTION: ", ACTION_BOOL, 0, Config::GetMuzzleFlash, Config::SetMuzzleFlash));
+        effectsmenu.push_back(MenuEntry("ATMOSPHERIC DUST: ", ACTION_BOOL, 0, MenuGetAtmosphericDust, MenuSetAtmosphericDust));
         effectsmenu.push_back(MenuEntry("BLOB SHADOWS: ", ACTION_BOOL, 0, MenuGetBlobShadows, MenuSetBlobShadows));
         effectsmenu.push_back(MenuEntry("ATMOSPHERIC VIGNETTE: ", ACTION_BOOL, 0, Config::GetVignetteEnabled, Config::SetVignetteEnabled));
         effectsmenu.push_back(MenuEntry("VIGNETTE STRENGTH: ", ACTION_INT, 6, Config::GetVignetteStrength, Config::SetVignetteStrength));
@@ -438,6 +446,7 @@ MenuScreen::MenuReturn MenuScreen::Update(SDL_Event& tevent)
                 effectsmenu.push_back(MenuEntry("RETURN", ACTION_SWITCHMENU, MENUSTATUS_MAIN, nullptr, nullptr));
                 effectsmenu.push_back(MenuEntry("BLOOD SIZE: ", ACTION_INT, 5, Config::GetBlood, Config::SetBlood));
                 effectsmenu.push_back(MenuEntry("MUZZLE FLASH AND REFLECTION: ", ACTION_BOOL, 0, Config::GetMuzzleFlash, Config::SetMuzzleFlash));
+                effectsmenu.push_back(MenuEntry("ATMOSPHERIC DUST: ", ACTION_BOOL, 0, MenuGetAtmosphericDust, MenuSetAtmosphericDust));
                 effectsmenu.push_back(MenuEntry("BLOB SHADOWS: ", ACTION_BOOL, 0, MenuGetBlobShadows, MenuSetBlobShadows));
                 // Halbzeile //
                 effectsmenu.push_back(MenuEntry("ATMOSPHERIC VIGNETTE: ", ACTION_BOOL, 0, Config::GetVignetteEnabled, Config::SetVignetteEnabled));

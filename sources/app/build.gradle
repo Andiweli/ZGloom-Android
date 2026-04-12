@@ -7,8 +7,8 @@ android {
         applicationId "com.ast.gloomcollection"
         minSdkVersion 16
         targetSdkVersion 33
-        versionCode 7
-        versionName "12.2025"
+        versionCode 8
+        versionName "04.2026"
 
         externalNativeBuild {
             cmake {

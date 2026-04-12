@@ -1,5 +1,7 @@
 #include "renderer.h"
 #include <cstdint>
+#include <algorithm>
+#include <cmath>
 #include "quick.h"
 #include "gloommaths.h"
 #include "objectgraphics.h"
@@ -212,6 +214,55 @@ static inline void ZG_DrawBlobShadow(
 }
 
 
+
+static inline float ZG_DustClamp(float v, float mn, float mx)
+{
+    if (v < mn) return mn;
+    if (v > mx) return mx;
+    return v;
+}
+
+static inline float ZG_DustSaturate(float v)
+{
+    return ZG_DustClamp(v, 0.0f, 1.0f);
+}
+
+static inline float ZG_DustSmoothStep(float a, float b, float x)
+{
+    const float span = (b - a);
+    if (span <= 0.0001f)
+    {
+        return (x >= b) ? 1.0f : 0.0f;
+    }
+    float t = ZG_DustSaturate((x - a) / span);
+    return t * t * (3.0f - 2.0f * t);
+}
+
+static inline void ZG_BlendDustPixel(uint32_t& dst, uint32_t src, uint8_t alpha)
+{
+    if (alpha == 0) return;
+    if (alpha >= 255)
+    {
+        dst = 0xFF000000 | (src & 0x00FFFFFF);
+        return;
+    }
+
+    uint32_t dr = (dst >> 16) & 0xFF;
+    uint32_t dg = (dst >> 8) & 0xFF;
+    uint32_t db = dst & 0xFF;
+
+    uint32_t sr = (src >> 16) & 0xFF;
+    uint32_t sg = (src >> 8) & 0xFF;
+    uint32_t sb = src & 0xFF;
+
+    uint32_t inv = 255 - alpha;
+    uint32_t r = (sr * alpha + dr * inv) / 255;
+    uint32_t g = (sg * alpha + dg * inv) / 255;
+    uint32_t b = (sb * alpha + db * inv) / 255;
+
+    dst = 0xFF000000 | (r << 16) | (g << 8) | b;
+}
+
 const uint32_t Renderer::darkpalettes[16][16] =
 { { 0x00000000, 0x00000011, 0x00000022, 0x00000033, 0x00000044, 0x00000055, 0x00000066, 0x00000077, 0x00000088, 0x00000099, 0x000000aa, 0x000000bb, 0x000000cc, 0x000000dd, 0x000000ee, 0x000000ff },
 { 0x00000000, 0x00000000, 0x00000011, 0x00000022, 0x00000033, 0x00000044, 0x00000055, 0x00000066, 0x00000077, 0x00000088, 0x00000099, 0x000000aa, 0x000000bb, 0x000000cc, 0x000000dd, 0x000000ee },
@@ -387,6 +438,19 @@ void Renderer::Init(SDL_Surface* nrendersurface, GloomMap* ngloommap, ObjectGrap
 	floorstart.resize(renderwidth);
 
 	walls.resize(gloommap->GetZones().size());
+
+	DustTuning dusttuning;
+	dusttuning.enabled = (Config::GetDustEnabled() != 0);
+	dusttuning.densityScale = Config::GetDustDensity();
+	dusttuning.visibilityScale = Config::GetDustVisibility();
+	dusttuning.speedScale = Config::GetDustSpeedScale();
+	dusttuning.enablePlayerInfluence = (Config::GetDustPlayerInfluence() != 0);
+	dustsystem.SetTuning(dusttuning);
+	dustsystem.BuildFromMap(gloommap);
+	SDL_Log("[dust] init zones=%d particles=%d", dustsystem.GetZoneCount(), dustsystem.GetParticleCount());
+	dustrendercache.clear();
+	dustcamvalid = false;
+	dustlastticks = 0;
 
 	focmult = Config::GetFocalLength();
 
@@ -739,29 +803,245 @@ void Renderer::DrawBlood(Camera* camera)
 	}
 }
 
+void Renderer::DrawDust(Camera* camera, float dt)
+{
+    DustTuning dusttuning = dustsystem.GetTuning();
+    dusttuning.enabled = (Config::GetDustEnabled() != 0);
+    dusttuning.densityScale = Config::GetDustDensity();
+    dusttuning.visibilityScale = Config::GetDustVisibility();
+    dusttuning.speedScale = Config::GetDustSpeedScale();
+    dusttuning.enablePlayerInfluence = (Config::GetDustPlayerInfluence() != 0);
+    dustsystem.SetTuning(dusttuning);
+
+    if (!dusttuning.enabled)
+    {
+        return;
+    }
+
+    // In case the renderer got initialized before the map was fully ready, or the
+    // first zone pass found nothing on a tight map, rebuild once here lazily.
+    if (dustsystem.GetZoneCount() == 0 || dustsystem.GetParticleCount() == 0)
+    {
+        dustsystem.BuildFromMap(gloommap);
+        SDL_Log("[dust] lazy rebuild zones=%d particles=%d", dustsystem.GetZoneCount(), dustsystem.GetParticleCount());
+    }
+
+    int32_t camx = camera->x.GetInt();
+    int32_t camz = camera->z.GetInt();
+    int32_t dx = 0;
+    int32_t dz = 0;
+    if (dustcamvalid)
+    {
+        dx = camx - lastdustcamx;
+        dz = camz - lastdustcamz;
+    }
+    lastdustcamx = camx;
+    lastdustcamz = camz;
+    dustcamvalid = true;
+
+    DustCameraState dustcam;
+    dustcam.x = camx;
+    dustcam.y = camera->y;
+    dustcam.z = camz;
+    dustcam.rot = (uint8_t)(camera->rotquick.GetInt() & 0xFF);
+    dustcam.dx = dx;
+    dustcam.dz = dz;
+
+    dustsystem.Update(dustcam, dt);
+    dustsystem.GatherRenderParticles(dustrendercache);
+    if (dustrendercache.empty())
+    {
+        return;
+    }
+
+    int16_t cammatrix[4];
+    GloomMaths::GetCamRotRaw(dustcam.rot, cammatrix);
+
+    uint32_t* surface = (uint32_t*)(rendersurface->pixels);
+    const std::vector<DustZone>& dustzones = dustsystem.GetZones();
+
+    for (const DustRenderParticle& p : dustrendercache)
+    {
+        float dxw = p.x - (float)dustcam.x;
+        float dzw = p.z - (float)dustcam.z;
+        float rx = (dxw * (float)cammatrix[0] + dzw * (float)cammatrix[1]) / 32768.0f;
+        float rz = (dxw * (float)cammatrix[2] + dzw * (float)cammatrix[3]) / 32768.0f;
+
+        if (rz <= 1.0f)
+        {
+            continue;
+        }
+
+        float nearFade = ZG_DustSmoothStep(dusttuning.nearFadeStart, dusttuning.nearFadeEnd, rz);
+        float farFade = 1.0f - ZG_DustSmoothStep(dusttuning.farFadeStart, dusttuning.farFadeEnd, rz);
+
+        // Extra distance shaping so dust gets darker and less present the farther away it is.
+        // The far end should feel empty rather than filled with bright floating pixels.
+        float distanceDarken = 1.0f - ZG_DustSmoothStep(380.0f, 1180.0f, rz) * 0.78f;
+        float distancePresence = 1.0f - ZG_DustSmoothStep(760.0f, 1425.0f, rz) * 0.60f;
+
+        float depthFade = nearFade * farFade * distancePresence;
+        if (depthFade <= 0.001f)
+        {
+            continue;
+        }
+
+        float sxf = (float)halfrenderwidth + ((rx * (float)focmult) / rz);
+        int sx = (int)sxf;
+        if (sx < 0 || sx >= renderwidth)
+        {
+            continue;
+        }
+
+        // Match ZGloom sprite/object Y projection exactly.
+        // World Y for objects lives roughly in [-256..0], with more negative values being higher.
+        float iyf = (-p.y) - (float)camera->y;
+        float syf = (float)halfrenderheight - (iyf * (float)focmult) / rz;
+        if (syf < -24.0f || syf > (float)renderheight + 24.0f)
+        {
+            continue;
+        }
+
+        if ((int)rz > zbuff[sx])
+        {
+            continue;
+        }
+
+        int sy = (int)syf;
+        float ceilFade = ZG_DustSmoothStep((float)ceilend[sx] - 8.0f, (float)ceilend[sx] + 14.0f, syf);
+        float floorFade = 1.0f - ZG_DustSmoothStep((float)floorstart[sx] - 14.0f, (float)floorstart[sx] + 8.0f, syf);
+        float verticalFade = ceilFade * floorFade;
+        if (verticalFade <= 0.001f)
+        {
+            continue;
+        }
+
+        float edgeFade = 1.0f;
+        if (p.zoneIndex < dustzones.size())
+        {
+            const DustZone& zone = dustzones[p.zoneIndex];
+            float edgeDist = std::min(std::min(p.x - (float)zone.minX, (float)zone.maxX - p.x),
+                                      std::min(p.z - (float)zone.minZ, (float)zone.maxZ - p.z));
+            edgeFade = ZG_DustSmoothStep(0.0f, (float)dusttuning.zoneFadeDistance, edgeDist);
+        }
+        if (edgeFade <= 0.001f)
+        {
+            continue;
+        }
+
+        int proby = sy;
+        if (proby < 0) proby = 0;
+        if (proby >= renderheight) proby = renderheight - 1;
+        uint32_t probe = surface[sx + proby * renderwidth];
+        float luma = (((probe >> 16) & 0xFF) * 0.2126f + ((probe >> 8) & 0xFF) * 0.7152f + (probe & 0xFF) * 0.0722f) / 255.0f;
+        float lightFactor = 0.35f + std::pow(ZG_DustSaturate(luma), 1.10f) * 0.65f;
+
+        float finalAlpha = p.alpha * dusttuning.visibilityScale * depthFade * verticalFade * edgeFade * lightFactor;
+        if (finalAlpha <= 0.002f)
+        {
+            continue;
+        }
+
+        float projectedRadius = (p.size * (float)focmult) / rz;
+        if (projectedRadius > 6.0f) projectedRadius = 6.0f;
+
+        uint32_t dustcol;
+        ColourModify(0xF2, 0xE6, 0xD0, dustcol, GetDimPalette((int32_t)rz));
+
+        // Darken distant dust explicitly, not only via alpha, so it visually recedes into the scene.
+        uint8_t dr = (uint8_t)((float)((dustcol >> 16) & 0xFF) * distanceDarken);
+        uint8_t dg = (uint8_t)((float)((dustcol >> 8) & 0xFF) * distanceDarken);
+        uint8_t db = (uint8_t)((float)(dustcol & 0xFF) * distanceDarken);
+        dustcol = 0xFF000000 | (dr << 16) | (dg << 8) | db;
+
+        // Keep far particles strictly 1:1 in screen space so they never become
+        // visually stretched like 1 px high and 2 px wide.
+        if (projectedRadius < 0.85f)
+        {
+            int cx = (int)(sxf + 0.5f);
+            int cy = (int)(syf + 0.5f);
+            if (cx >= 0 && cx < renderwidth && cy >= 0 && cy < renderheight)
+            {
+                if ((int)rz <= zbuff[cx])
+                {
+                    uint8_t a = (uint8_t)ZG_DustClamp(finalAlpha * 255.0f, 0.0f, 255.0f);
+                    ZG_BlendDustPixel(surface[cx + cy * renderwidth], dustcol, a);
+                }
+            }
+            continue;
+        }
+        else if (projectedRadius < 1.65f)
+        {
+            int cx = (int)(sxf + 0.5f);
+            int cy = (int)(syf + 0.5f);
+            int x0 = cx - 1;
+            int x1 = cx;
+            int y0 = cy - 1;
+            int y1 = cy;
+            if (x0 < 0) x0 = 0;
+            if (y0 < 0) y0 = 0;
+            if (x1 >= renderwidth) x1 = renderwidth - 1;
+            if (y1 >= renderheight) y1 = renderheight - 1;
+
+            const uint8_t a = (uint8_t)ZG_DustClamp(finalAlpha * 0.92f * 255.0f, 0.0f, 255.0f);
+            for (int py = y0; py <= y1; ++py)
+            {
+                for (int px = x0; px <= x1; ++px)
+                {
+                    if ((int)rz > zbuff[px])
+                    {
+                        continue;
+                    }
+                    ZG_BlendDustPixel(surface[px + py * renderwidth], dustcol, a);
+                }
+            }
+            continue;
+        }
+
+        int radius = (int)(projectedRadius + 0.5f);
+        if (radius < 2) radius = 2;
+        if (radius > 6) radius = 6;
+
+        int x0 = (int)(sxf + 0.5f) - radius;
+        int x1 = (int)(sxf + 0.5f) + radius;
+        int y0 = (int)(syf + 0.5f) - radius;
+        int y1 = (int)(syf + 0.5f) + radius;
+        if (x0 < 0) x0 = 0;
+        if (y0 < 0) y0 = 0;
+        if (x1 >= renderwidth) x1 = renderwidth - 1;
+        if (y1 >= renderheight) y1 = renderheight - 1;
+
+        float rr = projectedRadius * projectedRadius;
+        if (rr < 1.0f) rr = 1.0f;
+
+        for (int py = y0; py <= y1; ++py)
+        {
+            float oy = ((float)py + 0.5f) - syf;
+            for (int px = x0; px <= x1; ++px)
+            {
+                if ((int)rz > zbuff[px])
+                {
+                    continue;
+                }
+
+                float ox = ((float)px + 0.5f) - sxf;
+                float d2 = ox * ox + oy * oy;
+                if (d2 > rr)
+                {
+                    continue;
+                }
+
+                float local = 1.0f - (d2 / rr);
+                local *= local;
+                uint8_t a = (uint8_t)ZG_DustClamp(finalAlpha * local * 255.0f, 0.0f, 255.0f);
+                ZG_BlendDustPixel(surface[px + py * renderwidth], dustcol, a);
+            }
+        }
+    }
+}
+
 void Renderer::DrawObjects(Camera* camera)
 {
-    // --- Dust parallax: feed camera motion (screen-space deltas) ---
-    static int prev_cam_x = 0, prev_cam_z = 0, prev_cam_rot = 0;
-    int cam_x = camera->x.GetInt();
-    int cam_z = camera->z.GetInt();
-    int cam_rot = camera->rotquick.GetInt() & 0xFF;
-
-    int dx = cam_x - prev_cam_x;
-    int dz = cam_z - prev_cam_z;
-    int drot = cam_rot - prev_cam_rot;
-
-    prev_cam_x = cam_x;
-    prev_cam_z = cam_z;
-    prev_cam_rot = cam_rot;
-
-    // Approximate mapping to screen-space drift (tweakable)
-    float screen_dx = dx * 0.08f;
-    float screen_dy = dz * 0.08f;
-    float yaw_rate = (float)((drot & 0xFF)) * (6.28318530718f / 256.0f);
-
-    RendererHooks::setCameraMotion(screen_dx, screen_dy, yaw_rate);
-
 	RendererHooks::markWorldFrame();
 
 	Quick x, z, temp;
@@ -1374,6 +1654,19 @@ void Renderer::Render(Camera* camera)
 		DrawCeil(camera);
 		DrawFloor(camera);
 	}
+
+	Uint32 now = SDL_GetTicks();
+	float dustdt = 0.0f;
+	if (dustlastticks == 0)
+	{
+		dustlastticks = now;
+	}
+	else
+	{
+		dustdt = (float)(now - dustlastticks) / 1000.0f;
+		dustlastticks = now;
+	}
+	DrawDust(camera, dustdt);
 	DrawObjects(camera);
 	DrawBlood(camera);
 

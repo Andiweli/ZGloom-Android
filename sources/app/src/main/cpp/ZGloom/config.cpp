@@ -49,6 +49,11 @@ namespace Config
 	static int sfxvol;
 	static int musvol;
 	static xmp_context musctx;
+	static bool dustenabled = false;
+	static float dustdensity = 1.0f;
+	static float dustvisibility = 1.0f;
+	static float dustspeedscale = 1.0f;
+	static bool dustplayerinfluence = true;
 
 	// needed to toggle fullscreen
 	static SDL_Window* win;
@@ -482,6 +487,26 @@ if (command == "blobshadows")
 {
     SetBlobShadows(std::stoi(line));
 }
+if (command == "dust")
+{
+    SetDustEnabled(std::stoi(line));
+}
+if (command == "dustdensity")
+{
+    SetDustDensity(std::stof(line));
+}
+if (command == "dustvisibility")
+{
+    SetDustVisibility(std::stof(line));
+}
+if (command == "dustspeed")
+{
+    SetDustSpeedScale(std::stof(line));
+}
+if (command == "dustplayerinfluence")
+{
+    SetDustPlayerInfluence(std::stoi(line));
+}
 if (command == "autofire")
 					{
 						autofire = std::stoi(line) != 0;
@@ -544,6 +569,57 @@ void SetBlobShadows(int on)
 {
     ZGloomPC::gBlobShadows = (on != 0);
 }
+
+int GetDustEnabled()
+{
+    return dustenabled ? 1 : 0;
+}
+
+void SetDustEnabled(int on)
+{
+    dustenabled = (on != 0);
+}
+
+float GetDustDensity()
+{
+    return dustdensity;
+}
+
+void SetDustDensity(float v)
+{
+    dustdensity = std::max(0.0f, std::min(v, 4.0f));
+}
+
+float GetDustVisibility()
+{
+    return dustvisibility;
+}
+
+void SetDustVisibility(float v)
+{
+    dustvisibility = std::max(0.0f, std::min(v, 4.0f));
+}
+
+float GetDustSpeedScale()
+{
+    return dustspeedscale;
+}
+
+void SetDustSpeedScale(float v)
+{
+    dustspeedscale = std::max(0.1f, std::min(v, 4.0f));
+}
+
+int GetDustPlayerInfluence()
+{
+    return dustplayerinfluence ? 1 : 0;
+}
+
+void SetDustPlayerInfluence(int on)
+{
+    dustplayerinfluence = (on != 0);
+}
+
 int GetMT()
 	{
 		return multithread?1:0;
@@ -725,6 +801,13 @@ file << ";ZGloom Configuration\n\n";
 
 		file << ";blob shadows enabled?\n";
 		file << "blobshadows " << GetBlobShadows() << "\n\n";
+
+		file << ";World-space dust in corridors / interior cells\n";
+		file << "dust " << GetDustEnabled() << "\n";
+		file << "dustdensity " << GetDustDensity() << "\n";
+		file << "dustvisibility " << GetDustVisibility() << "\n";
+		file << "dustspeed " << GetDustSpeedScale() << "\n";
+		file << "dustplayerinfluence " << GetDustPlayerInfluence() << "\n\n";
 
 		file << ";Display Effects\n";
 		file << "vignette " << Config::GetVignetteEnabled() << "\n";

@@ -9,6 +9,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Collect all ZGloom source files (C++)
 file(GLOB_RECURSE ZGLOOM_SOURCES CONFIGURE_DEPENDS
     "ZGloom/*.cpp"
+	"ZGloom/effects/*.cpp"
 )
 
 if(ZGLOOM_SOURCES STREQUAL "")

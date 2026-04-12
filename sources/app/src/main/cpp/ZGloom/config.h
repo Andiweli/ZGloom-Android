@@ -47,6 +47,16 @@ namespace Config
 	void SetBlood(int b);
 	int GetBlobShadows();
 	void SetBlobShadows(int on);
+	int GetDustEnabled();
+	void SetDustEnabled(int on);
+	float GetDustDensity();
+	void SetDustDensity(float v);
+	float GetDustVisibility();
+	void SetDustVisibility(float v);
+	float GetDustSpeedScale();
+	void SetDustSpeedScale(float v);
+	int GetDustPlayerInfluence();
+	void SetDustPlayerInfluence(int on);
 		void SetDebug(bool b);
 	bool GetDebug();
 	void SetFPS(uint32_t f);
