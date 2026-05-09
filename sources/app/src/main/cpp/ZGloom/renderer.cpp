@@ -55,11 +55,30 @@ static inline void ColourModifySmooth(uint8_t r, uint8_t g, uint8_t b, uint32_t&
     uint32_t B = (uint32_t(b) * f) >> 8;
     out = 0xFF000000u | (R<<16) | (G<<8) | B;
 }
-static inline void ColourModifySmoothFade(uint8_t r, uint8_t g, uint8_t b, uint32_t& out, int z){
+static inline int ZG_ClampTeleFade(int fadeTimer){
+    if (fadeTimer < 0) return 0;
+    if (fadeTimer > 24) return 24;
+    return fadeTimer;
+}
+
+static inline void ColourModifySmoothFade(uint8_t r, uint8_t g, uint8_t b, uint32_t& out, int z, int fadeTimer){
     uint8_t f = SL_FactorFade(z);
     uint32_t R = (uint32_t(r) * f) >> 8;
     uint32_t G = (uint32_t(g) * f) >> 8;
     uint32_t B = (uint32_t(b) * f) >> 8;
+
+    // Gloom Deluxe teleporter/level-exit beam: fade the already-distance-lit
+    // colour towards the original blue-white teleport palette.  The previous
+    // smooth-lighting path ignored fadetimer completely, so floors/ceilings/
+    // walls only became slightly darker instead of turning blue.
+    const int ft = ZG_ClampTeleFade(fadeTimer);
+    if (ft > 0)
+    {
+        R = (R * (25 - ft) + 128u * ft) / 25u;
+        G = (G * (25 - ft) + 128u * ft) / 25u;
+        B = (B * (25 - ft) + 255u * ft) / 25u;
+    }
+
     out = 0xFF000000u | (R<<16) | (G<<8) | B;
 }
 
@@ -557,7 +576,7 @@ void Renderer::DrawCeil(Camera* camera)
 
 				if (fadetimer)
 				{
-					ColourModifySmoothFade(r,g,b,dimcol,z);
+					ColourModifySmoothFade(r,g,b,dimcol,z,fadetimer);
 				}
 				else
 				{
@@ -639,7 +658,7 @@ void Renderer::DrawFloor(Camera* camera)
 				uint32_t dimcol;
 				if (fadetimer)
 				{
-					ColourModifySmoothFade(r,g,b,dimcol,z);
+					ColourModifySmoothFade(r,g,b,dimcol,z,fadetimer);
 				}
 				else
 				{
@@ -712,7 +731,7 @@ void Renderer::DrawColumn(int32_t x, int32_t ystart, int32_t h, Column* textured
 				uint32_t dimcol;
 				if (fadetimer)
 				{
-					ColourModifySmoothFade(r,g,b,dimcol,z);
+					ColourModifySmoothFade(r,g,b,dimcol,z,fadetimer);
 				}
 				else
 				{
@@ -729,6 +748,53 @@ void Renderer::DrawColumn(int32_t x, int32_t ystart, int32_t h, Column* textured
 bool zcompare(const MapObject& first, const MapObject& second)
 {
 	return first.rotz > second.rotz;
+}
+
+void Renderer::ApplyTeleportPixelate()
+{
+	const int ft = ZG_ClampTeleFade(fadetimer);
+	if (ft <= 1 || !rendersurface || !rendersurface->pixels)
+	{
+		return;
+	}
+
+	// Original Amiga Gloom calls pixelate when ob_pixsize is non-zero.
+	// It copies the first pixel of a block over that block, with the first
+	// block starting at half size.  This gives the level-exit/teleporter its
+	// chunky "beam out" look instead of an instant map change.
+	int block = ft;
+	if (block < 2) block = 2;
+	if (block > 64) block = 64;
+
+	uint32_t* surface = (uint32_t*)rendersurface->pixels;
+
+	for (int x = 0; x < renderwidth; )
+	{
+		int bw = (x == 0) ? (block >> 1) : block;
+		if (bw < 1) bw = 1;
+		if (x + bw > renderwidth) bw = renderwidth - x;
+
+		for (int y = 0; y < renderheight; )
+		{
+			int bh = (y == 0) ? (block >> 1) : block;
+			if (bh < 1) bh = 1;
+			if (y + bh > renderheight) bh = renderheight - y;
+
+			const uint32_t sample = surface[x + y * renderwidth];
+			for (int yy = y; yy < y + bh; ++yy)
+			{
+				uint32_t* row = surface + yy * renderwidth + x;
+				for (int xx = 0; xx < bw; ++xx)
+				{
+					row[xx] = sample;
+				}
+			}
+
+			y += bh;
+		}
+
+		x += bw;
+	}
 }
 
 void Renderer::DrawBlood(Camera* camera)
@@ -1690,6 +1756,8 @@ void Renderer::Render(Camera* camera)
 		}
 	}
 #endif
+
+	ApplyTeleportPixelate();
 
 	SDL_UnlockSurface(rendersurface);
 }

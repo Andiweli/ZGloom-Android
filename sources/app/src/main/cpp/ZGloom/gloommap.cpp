@@ -547,7 +547,7 @@ void GloomMap::DumpDebug()
 	}
 }
 
-void GloomMap::ExecuteEvent(uint32_t e, bool& gotele, Teleport& teleout)
+void GloomMap::ExecuteEvent(uint32_t e, bool& gotele, Teleport& teleout, bool allowTeleport)
 {
 	// Record event for Vita-style replay after load
 	EventReplay::Record(e);
@@ -762,7 +762,15 @@ void GloomMap::ExecuteEvent(uint32_t e, bool& gotele, Teleport& teleout)
 
 	if (diddoor) SoundHandler::Play(SoundHandler::SOUND_DOOR);
 
-	//teleports
+	// teleports
+	// Event 24 is the level exit in the original Amiga code.  It still executes
+	// the event script, but teleport commands are ignored while finished2 is set,
+	// otherwise the slow blue beam-out would be replaced by the normal fast
+	// teleport animation.  allowTeleport lets GameLogic mirror that behaviour.
+	if (!allowTeleport)
+	{
+		return;
+	}
 
 	for (auto t : teles)
 	{

@@ -81,6 +81,7 @@ class Renderer
 		void DrawDust(Camera* camera, float dt);
 		void DrawObjects(Camera* camera);
 		void DrawBlood(Camera* camera);
+		void ApplyTeleportPixelate();
 		Column* GetTexColumn(int hitzone, Quick texpos, int& basetexture);
 		void ProcessColumn(const uint32_t& x, const int16_t& y, std::vector<int32_t>& ceilend, std::vector<int32_t>& floorstart);
 

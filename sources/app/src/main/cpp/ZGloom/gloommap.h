@@ -364,7 +364,7 @@ class GloomMap
 		Column** GetTexPointers(){ return texturepointers;};
 		Column** GetTexPointersOrig(){ return texturepointersorig; };
 		std::vector<uint32_t>& GetCollisions(int zt, int x, int z) {return collisionpolys[zt][x][z];};
-		void ExecuteEvent(uint32_t e, bool& gotele, Teleport& teleout);
+		void ExecuteEvent(uint32_t e, bool& gotele, Teleport& teleout, bool allowTeleport = true);
 		GloomMap() { hasflat = false; };
 
 	private:
