@@ -16,25 +16,29 @@ void TitleScreen::Render(SDL_Surface* src, SDL_Surface* dest, Font& font)
 		if (!hasSave && selection == MAINENTRY_RESUME)
 			selection = MAINENTRY_PLAY;
 
+		const int lineStep = 15;
+
 		if (hasSave)
 		{
-			// With save: show RESUME above START NEW GAME
-			if (flash || (selection != MAINENTRY_RESUME)) font.PrintMessage("RESUME SAVED POSITION", 150, dest, 1);
-			if (flash || (selection != MAINENTRY_PLAY))   font.PrintMessage("START NEW GAME", 165, dest, 1);
-			if (flash || (selection != MAINENTRY_SELECT)) font.PrintMessage("SELECT LEVEL", 180, dest, 1);
-			if (flash || (selection != MAINENTRY_ABOUT))  font.PrintMessage("ABOUT GLOOM AND THIS PORT", 195, dest, 1);
-			if (flash || (selection != MAINENTRY_QUIT))   font.PrintMessage("EXIT", 210, dest, 1);
+			// Original-style placement: menu sits above the lower logo overlay.
+			const int menuY = 91;
+			if (flash || (selection != MAINENTRY_RESUME)) font.PrintMessage("RESUME SAVED POSITION", menuY + lineStep * 0, dest, 1);
+			if (flash || (selection != MAINENTRY_PLAY))   font.PrintMessage("START NEW GAME",          menuY + lineStep * 1, dest, 1);
+			if (flash || (selection != MAINENTRY_SELECT)) font.PrintMessage("SELECT LEVEL",             menuY + lineStep * 2, dest, 1);
+			if (flash || (selection != MAINENTRY_ABOUT))  font.PrintMessage("ABOUT GLOOM AND THIS PORT", menuY + lineStep * 3, dest, 1);
+			if (flash || (selection != MAINENTRY_QUIT))   font.PrintMessage("EXIT",                     menuY + lineStep * 4, dest, 1);
 		}
 		else
 		{
-			// Without save: classic 4-entry menu
-			if (flash || (selection != MAINENTRY_PLAY))   font.PrintMessage("START NEW GAME", 160, dest, 1);
-			if (flash || (selection != MAINENTRY_SELECT)) font.PrintMessage("SELECT LEVEL", 175, dest, 1);
-			if (flash || (selection != MAINENTRY_ABOUT))  font.PrintMessage("ABOUT GLOOM AND THIS PORT", 190, dest, 1);
-			if (flash || (selection != MAINENTRY_QUIT))   font.PrintMessage("EXIT", 205, dest, 1);
+			// Original-style placement: menu sits above the lower logo overlay.
+			const int menuY = 98;
+			if (flash || (selection != MAINENTRY_PLAY))   font.PrintMessage("START NEW GAME",          menuY + lineStep * 0, dest, 1);
+			if (flash || (selection != MAINENTRY_SELECT)) font.PrintMessage("SELECT LEVEL",             menuY + lineStep * 1, dest, 1);
+			if (flash || (selection != MAINENTRY_ABOUT))  font.PrintMessage("ABOUT GLOOM AND THIS PORT", menuY + lineStep * 2, dest, 1);
+			if (flash || (selection != MAINENTRY_QUIT))   font.PrintMessage("EXIT",                     menuY + lineStep * 3, dest, 1);
 		}
 
-		font.PrintMessage("ZGLOOM ANDROID 05.2026", 243, dest, 1);
+		font.PrintMessage("ZGLOOM ANDROID 05.2026 v2", 243, dest, 1);
 	}
 	else if (status == TITLESTATUS_SELECT)
 	{

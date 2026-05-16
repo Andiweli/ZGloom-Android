@@ -1,0 +1,24 @@
+{
+  "buildFiles": [
+    "C:\\Users\\andiw\\AppData\\Local\\Android\\Sdk\\ndk\\21.0.6113669\\build\\cmake\\platforms.cmake",
+    "C:\\Users\\andiw\\AppData\\Local\\Android\\Sdk\\ndk\\21.0.6113669\\build\\cmake\\android.toolchain.cmake",
+    "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\CMakeLists.txt"
+  ],
+  "cleanCommands": [
+    "C:\\Users\\andiw\\AppData\\Local\\Android\\Sdk\\cmake\\3.10.2.4988404\\bin\\ninja.exe -C \"E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\.cxx\\cmake\\release\\armeabi-v7a\" clean"
+  ],
+  "buildTargetsCommand": "C:\\Users\\andiw\\AppData\\Local\\Android\\Sdk\\cmake\\3.10.2.4988404\\bin\\ninja.exe  -C \"E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\.cxx\\cmake\\release\\armeabi-v7a\" {LIST_OF_TARGETS_TO_BUILD}",
+  "libraries": {
+    "main-Release-armeabi-v7a": {
+      "artifactName": "main",
+      "buildCommand": "C:\\Users\\andiw\\AppData\\Local\\Android\\Sdk\\cmake\\3.10.2.4988404\\bin\\ninja.exe -C \"E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\.cxx\\cmake\\release\\armeabi-v7a\" main",
+      "abi": "armeabi-v7a",
+      "output": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\build\\intermediates\\cmake\\release\\obj\\armeabi-v7a\\libmain.so",
+      "runtimeFiles": [
+        "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\prebuilt\\armeabi-v7a\\libSDL2.so",
+        "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\prebuilt\\armeabi-v7a\\libSDL2_mixer.so",
+        "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\prebuilt\\armeabi-v7a\\libxmp.so"
+      ]
+    }
+  }
+}

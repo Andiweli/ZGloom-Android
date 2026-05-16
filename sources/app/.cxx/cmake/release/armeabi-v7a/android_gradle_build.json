@@ -1,0 +1,207 @@
+{
+  "stringTable": {
+    "0": "E:/Development/Android/ZGloom/ZGloom-Android/app/.cxx/cmake/release/armeabi-v7a",
+    "1": "--target=armv7-none-linux-androideabi16 --gcc-toolchain=C:/Users/andiw/AppData/Local/Android/Sdk/ndk/21.0.6113669/toolchains/llvm/prebuilt/windows-x86_64 --sysroot=C:/Users/andiw/AppData/Local/Android/Sdk/ndk/21.0.6113669/toolchains/llvm/prebuilt/windows-x86_64/sysroot -Dmain_EXPORTS -IE:/Development/Android/ZGloom/ZGloom-Android/app/src/main/cpp/ZGloom -IE:/Development/Android/ZGloom/ZGloom-Android/app/src/main/cpp/ZGloom/xmp/include -IE:/Development/Android/ZGloom/ZGloom-Android/app/src/main/cpp/SDL2 -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -march=armv7-a -mthumb -Wformat -Werror=format-security -std=c++14 -DANDROID -D__ANDROID__ -Oz -DNDEBUG -fPIC -std=c++14"
+  },
+  "buildFiles": [
+    "C:\\Users\\andiw\\AppData\\Local\\Android\\Sdk\\ndk\\21.0.6113669\\build\\cmake\\platforms.cmake",
+    "C:\\Users\\andiw\\AppData\\Local\\Android\\Sdk\\ndk\\21.0.6113669\\build\\cmake\\android.toolchain.cmake",
+    "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\CMakeLists.txt"
+  ],
+  "cleanCommands": [
+    "C:\\Users\\andiw\\AppData\\Local\\Android\\Sdk\\cmake\\3.10.2.4988404\\bin\\ninja.exe -C \"E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\.cxx\\cmake\\release\\armeabi-v7a\" clean"
+  ],
+  "buildTargetsCommand": "C:\\Users\\andiw\\AppData\\Local\\Android\\Sdk\\cmake\\3.10.2.4988404\\bin\\ninja.exe  -C \"E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\.cxx\\cmake\\release\\armeabi-v7a\" {LIST_OF_TARGETS_TO_BUILD}",
+  "libraries": {
+    "main-Release-armeabi-v7a": {
+      "buildCommand": "C:\\Users\\andiw\\AppData\\Local\\Android\\Sdk\\cmake\\3.10.2.4988404\\bin\\ninja.exe -C \"E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\.cxx\\cmake\\release\\armeabi-v7a\" main",
+      "buildType": "release",
+      "toolchain": "623334818",
+      "abi": "armeabi-v7a",
+      "artifactName": "main",
+      "files": [
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\ConfigAmbienceImpl.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\ConfigOverlays.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\EventReplay.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\MenuAdapters.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\SaveSystem.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\audio\\AtmosphereVolume.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\audio\\EmbeddedBGM.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\binresource.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\cheats\\Cheats.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\config.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\decrunchmania.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\effects\\BlobShadowToggle.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\effects\\Dust_Particles.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\effects\\FilmGrainOverlay.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\effects\\FrameLimiter.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\effects\\RendererHooks.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\effects\\ScanlineOverlay.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\effects\\VignetteOverlay.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\font.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\gamelogic.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\gloommap.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\gloommaths.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\hud.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\iffhandler.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\menuscreen.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\monsterlogic.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\objectgraphics.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\quick.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\renderer.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\script.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\soundhandler.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\titlescreen.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        },
+        {
+          "src": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\cpp\\ZGloom\\zgloom.cpp",
+          "flagsOrdinal": 1,
+          "workingDirectoryOrdinal": 0
+        }
+      ],
+      "headers": [],
+      "output": "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\build\\intermediates\\cmake\\release\\obj\\armeabi-v7a\\libmain.so",
+      "runtimeFiles": [
+        "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\prebuilt\\armeabi-v7a\\libSDL2.so",
+        "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\prebuilt\\armeabi-v7a\\libSDL2_mixer.so",
+        "E:\\Development\\Android\\ZGloom\\ZGloom-Android\\app\\src\\main\\prebuilt\\armeabi-v7a\\libxmp.so"
+      ]
+    }
+  },
+  "toolchains": {
+    "623334818": {
+      "cppCompilerExecutable": "C:\\Users\\andiw\\AppData\\Local\\Android\\Sdk\\ndk\\21.0.6113669\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe"
+    }
+  },
+  "cFileExtensions": [],
+  "cppFileExtensions": [
+    "cpp"
+  ]
+}
