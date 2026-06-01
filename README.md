@@ -7,6 +7,7 @@ Android / OUYA / Logitech G-Cloud port of the modern **ZGloom** engine, bringing
 [![Android 16](https://img.shields.io/badge/up%20to-Android%2016-green)](https://github.com/andiweli/ZGloom-Android/releases/latest)
 [![ABI](https://img.shields.io/badge/ABI-DualABI%2032%2F64bit-orange.svg)](https://github.com/andiweli/ZGloom-Android/releases/latest)
 [![Engine](https://img.shields.io/badge/engine-SDL2%20%2B%20LibXMP-brightgreen.svg)](https://github.com/andiweli/ZGloom-Android/releases/latest)
+![AI](https://img.shields.io/badge/AI-assisted%20coding-6e7781)
 [![Controller](https://img.shields.io/badge/controls-Controller-blueviolet)](https://github.com/andiweli/ZGloom-Android/releases/latest)
 
 
