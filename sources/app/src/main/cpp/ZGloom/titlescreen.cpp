@@ -38,7 +38,7 @@ void TitleScreen::Render(SDL_Surface* src, SDL_Surface* dest, Font& font)
 			if (flash || (selection != MAINENTRY_QUIT))   font.PrintMessage("EXIT",                     menuY + lineStep * 3, dest, 1);
 		}
 
-		font.PrintMessage("ZGLOOM ANDROID 05.2026 v2", 243, dest, 1);
+		font.PrintMessage("ZGLOOM ANDROID 07.2026", 243, dest, 1);
 	}
 	else if (status == TITLESTATUS_SELECT)
 	{

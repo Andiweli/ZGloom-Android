@@ -1328,6 +1328,22 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
 //            Log.v("SDL", "key up: " + keyCode + ", deviceId = " + deviceId + ", source = " + source);
 //        }
 
+        // Controller MENU buttons can otherwise be eaten by the SDL pad path on
+        // Android/OUYA. Route KEYCODE_MENU from SDL joystick devices as a real
+        // keyboard MENU key so the game can treat it as an explicit pause/menu
+        // toggle. This is intentionally generic for Android controller devices:
+        // OUYA middle button and other controller menu buttons use the same path,
+        // while normal keyboards/system keys keep their default handling.
+        if (keyCode == KeyEvent.KEYCODE_MENU && SDLControllerManager.isDeviceSDLJoystick(deviceId)) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                onNativeKeyDown(KeyEvent.KEYCODE_MENU);
+                return true;
+            } else if (event.getAction() == KeyEvent.ACTION_UP) {
+                onNativeKeyUp(KeyEvent.KEYCODE_MENU);
+                return true;
+            }
+        }
+
         // Dispatch the different events depending on where they come from
         // Some SOURCE_JOYSTICK, SOURCE_DPAD or SOURCE_GAMEPAD are also SOURCE_KEYBOARD
         // So, we try to process them as JOYSTICK/DPAD/GAMEPAD events first, if that fails we try them as KEYBOARD

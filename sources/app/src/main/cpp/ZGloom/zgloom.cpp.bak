@@ -1,10 +1,11 @@
 // zgloom.cpp : Defines the entry point for the console application.
 //
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_mixer.h>
+#include <sdl2/SDL.h>
+#include <sdl2/SDL_mixer.h>
 #ifdef __ANDROID__
-#include <SDL2/SDL_system.h>
+#include <sdl2/SDL_system.h>
+#include <jni.h>
 #include <unistd.h>
 #include <errno.h>
 #endif
@@ -24,6 +25,24 @@ static xmp_context g_xmp = nullptr;
 #include "audio/AtmosphereVolume.h"
 #include "objectgraphics.h"
 #include <iostream>
+#include "SaveSystem.h"
+#include "EventReplay.h"
+
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <cctype>
+#include <cstring>
+#include <cstdlib>
+
+#ifndef _WIN32
+#include <dirent.h>
+#include <sys/stat.h>
+#endif
+
+#include "assets/launcher_bg_4_3_embed.h"
+#include "assets/launcher_bg_16_9_embed.h"
+
 #include "gamelogic.h"
 #include "soundhandler.h"
 #include "font.h"
@@ -32,20 +51,157 @@ static xmp_context g_xmp = nullptr;
 #include "hud.h"
 #include "effects/MuzzleFlashFX.h"
 
+static const unsigned char kEmbeddedBigfont2Crm2[] = {
+    0x43, 0x72, 0x4D, 0x32, 0x00, 0x00, 0x00, 0x00, 0x0D, 0xD2, 0x00, 0x00,
+    0x04, 0x42, 0x01, 0x76, 0x67, 0x9A, 0x65, 0xC0, 0x16, 0x73, 0x4D, 0x7C,
+    0xD1, 0xAE, 0x01, 0xFC, 0x4C, 0xD3, 0x2E, 0x68, 0x37, 0x00, 0x6B, 0x1E,
+    0x68, 0x56, 0x68, 0xB7, 0x02, 0x0E, 0x4F, 0x34, 0xEB, 0x9A, 0x58, 0x0D,
+    0xFA, 0x9E, 0x68, 0xA7, 0x34, 0xFB, 0x80, 0xBF, 0xB3, 0xCD, 0x26, 0xE6,
+    0x89, 0x40, 0xEA, 0x17, 0x9A, 0x2D, 0xCD, 0x05, 0xE0, 0x03, 0xC5, 0xE6,
+    0x9D, 0x66, 0x92, 0xF9, 0xA2, 0x5C, 0x0F, 0xBD, 0x33, 0x45, 0x7C, 0xD2,
+    0xAE, 0x03, 0xDF, 0x9C, 0xD3, 0x8E, 0x69, 0xD7, 0x02, 0x7E, 0x17, 0x34,
+    0x93, 0x9A, 0x4D, 0xC0, 0x1F, 0x89, 0xE6, 0x8D, 0x73, 0x4D, 0xB8, 0x00,
+    0x71, 0x73, 0x44, 0xF8, 0x17, 0x71, 0x7A, 0xFB, 0xBF, 0x8E, 0x39, 0x71,
+    0xB7, 0x35, 0x05, 0x44, 0x55, 0xC6, 0xDC, 0x8A, 0x52, 0xFF, 0xFE, 0x59,
+    0x1A, 0x45, 0x95, 0xC6, 0xFC, 0xD6, 0x21, 0xA2, 0x4B, 0xF7, 0xAE, 0x31,
+    0x14, 0xAF, 0xC2, 0x33, 0xBD, 0x1B, 0x1B, 0xCE, 0xB8, 0x46, 0x67, 0x12,
+    0x5B, 0x37, 0xC2, 0x5E, 0xB5, 0x4C, 0x19, 0xA5, 0x3A, 0xF2, 0x22, 0x8C,
+    0x86, 0x91, 0x1D, 0xB4, 0xC1, 0x1A, 0x3B, 0x34, 0x70, 0xBD, 0xE2, 0xF4,
+    0x09, 0xB5, 0xE8, 0x7B, 0xE7, 0x09, 0xD8, 0x1B, 0x15, 0x7B, 0x6F, 0x8B,
+    0x30, 0x52, 0xBA, 0xB3, 0xA6, 0x98, 0x13, 0xB7, 0x43, 0xB6, 0x3A, 0xB8,
+    0x44, 0xDC, 0x38, 0xB3, 0x6E, 0x7A, 0x27, 0x17, 0x08, 0xC9, 0x3B, 0xA2,
+    0x3E, 0xD0, 0xA5, 0x02, 0x74, 0x66, 0xD4, 0x7D, 0x6A, 0x1C, 0x73, 0x26,
+    0x71, 0x75, 0xE3, 0x49, 0xE2, 0xC2, 0xEC, 0xC2, 0x9D, 0x7C, 0xDE, 0xA0,
+    0x71, 0x0F, 0x7F, 0xA8, 0x73, 0x4C, 0xF0, 0x6F, 0xE7, 0x0F, 0x50, 0x06,
+    0x1A, 0xEF, 0xE2, 0xCC, 0x14, 0xAD, 0x08, 0xD1, 0x5E, 0xFE, 0x8A, 0x1A,
+    0xD1, 0x3E, 0x6F, 0x7A, 0xDF, 0x22, 0x4C, 0x59, 0x24, 0x4A, 0x91, 0x58,
+    0xFE, 0x63, 0x98, 0x48, 0x94, 0x38, 0x01, 0xF9, 0x91, 0x24, 0x00, 0x7E,
+    0xE1, 0x4A, 0xFC, 0xD0, 0x01, 0xFA, 0x1A, 0x3A, 0x43, 0xD0, 0x88, 0xF7,
+    0x64, 0x3D, 0x0E, 0x14, 0xA6, 0xC6, 0xC2, 0x3D, 0x0F, 0xF1, 0xEE, 0xCB,
+    0x02, 0x31, 0x1D, 0x30, 0xEB, 0x7A, 0x1E, 0xEC, 0xC2, 0xB4, 0x34, 0xDB,
+    0x86, 0x3B, 0x24, 0x74, 0xC8, 0xF8, 0x87, 0x09, 0x1F, 0xB4, 0x4F, 0xDC,
+    0xEB, 0x83, 0x0A, 0x31, 0xAE, 0x27, 0x30, 0x24, 0x39, 0x93, 0xBE, 0xEB,
+    0x85, 0x61, 0x46, 0xA6, 0x76, 0xB0, 0xA1, 0xD3, 0x3B, 0x42, 0x91, 0xE2,
+    0x82, 0xB9, 0x8D, 0x4C, 0xE5, 0x22, 0x74, 0x3D, 0x1A, 0x44, 0x98, 0x00,
+    0xFF, 0x11, 0x4A, 0x7F, 0x0C, 0x3D, 0x0B, 0x47, 0x35, 0x66, 0x39, 0xE9,
+    0x98, 0x20, 0x58, 0xCC, 0xA2, 0xCC, 0xCC, 0x62, 0x29, 0x40, 0xCD, 0x94,
+    0x4E, 0xCD, 0x33, 0x31, 0xFF, 0x0A, 0x37, 0x51, 0xE3, 0xCE, 0xFA, 0xCF,
+    0x75, 0xC1, 0x10, 0x46, 0x37, 0xB7, 0x88, 0xF1, 0x88, 0xA7, 0x27, 0xD0,
+    0x13, 0xC8, 0xF4, 0x84, 0x60, 0x99, 0x9B, 0x7E, 0x77, 0x66, 0x72, 0x95,
+    0xF8, 0x66, 0x67, 0x29, 0x14, 0x89, 0x77, 0x66, 0x99, 0xCB, 0x47, 0x1D,
+    0x54, 0x31, 0x87, 0x3F, 0x38, 0x70, 0xA1, 0xC5, 0x98, 0x29, 0x57, 0x30,
+    0x6A, 0x18, 0x24, 0x7E, 0xD1, 0x1C, 0xC9, 0xB0, 0x8F, 0x3C, 0xA7, 0x1F,
+    0x38, 0x77, 0x20, 0x32, 0xCA, 0x16, 0x60, 0xA5, 0x21, 0xB7, 0xED, 0xD0,
+    0x6C, 0x49, 0x54, 0x96, 0x41, 0x54, 0x77, 0x68, 0xE1, 0x0F, 0x43, 0xBC,
+    0x76, 0x25, 0x11, 0x47, 0xA3, 0x11, 0x4A, 0x23, 0x7D, 0x34, 0xD2, 0x3D,
+    0x1E, 0x47, 0x11, 0x1E, 0xEC, 0xB7, 0x76, 0x51, 0xEE, 0xFC, 0x29, 0x59,
+    0x77, 0xC4, 0x48, 0xF7, 0x73, 0x51, 0x3A, 0x98, 0x8C, 0x3D, 0xC2, 0x87,
+    0x26, 0x42, 0x59, 0xDA, 0x14, 0x4A, 0x22, 0x8B, 0xF0, 0xC2, 0xEE, 0x4C,
+    0xC2, 0xB4, 0xCD, 0x04, 0xDB, 0x75, 0xC2, 0x31, 0x87, 0x8B, 0xBE, 0x62,
+    0x11, 0x8A, 0x39, 0x98, 0x72, 0xE1, 0x0B, 0x4E, 0x7B, 0x72, 0x3E, 0x43,
+    0xEB, 0xC8, 0xA3, 0xBA, 0xEB, 0xDA, 0x14, 0xA2, 0x35, 0xDD, 0x79, 0x48,
+    0xEB, 0x87, 0x33, 0x4F, 0xCE, 0x14, 0x74, 0xB7, 0xC2, 0xCC, 0x14, 0xA2,
+    0x34, 0xC2, 0x40, 0x91, 0x95, 0x1D, 0x9A, 0x8F, 0xB3, 0x0C, 0x6E, 0xDB,
+    0x8E, 0xB3, 0xC8, 0xEE, 0x1E, 0x71, 0x8C, 0x51, 0x82, 0xCC, 0x14, 0xA1,
+    0x98, 0xD0, 0x5E, 0xC4, 0x3B, 0x8C, 0x0F, 0xA3, 0xBB, 0x57, 0x57, 0x29,
+    0x86, 0x3C, 0xC6, 0x18, 0x99, 0xC5, 0x27, 0x9D, 0xF4, 0x90, 0x94, 0x31,
+    0xCC, 0xEF, 0x0A, 0x55, 0xA7, 0x22, 0x77, 0x82, 0xEC, 0x65, 0x26, 0x72,
+    0x23, 0x98, 0xBA, 0x38, 0x97, 0xA3, 0xAF, 0x3A, 0x1D, 0xCC, 0xAB, 0xD3,
+    0xAF, 0x68, 0x52, 0xA3, 0xF1, 0x1D, 0xAD, 0x8C, 0x47, 0x66, 0x8E, 0x68,
+    0x82, 0x31, 0x4C, 0x7A, 0x03, 0x27, 0x77, 0x25, 0x98, 0x29, 0x52, 0x41,
+    0xD1, 0x27, 0x7C, 0x47, 0xA1, 0x14, 0x4B, 0x8F, 0x51, 0xF6, 0xD2, 0xC9,
+    0x23, 0xE7, 0x0A, 0x37, 0xE3, 0xAD, 0xDD, 0x22, 0x56, 0x9E, 0xD8, 0xF6,
+    0xD4, 0xF1, 0x9F, 0x1D, 0xFE, 0x70, 0x9E, 0x4A, 0xAC, 0xB0, 0x22, 0x95,
+    0xF8, 0x5B, 0x98, 0x36, 0xE1, 0x98, 0xFB, 0x47, 0x7C, 0xE9, 0xB0, 0x9B,
+    0x22, 0x5D, 0xAB, 0x12, 0xE3, 0x28, 0x89, 0x70, 0xA4, 0x48, 0xDD, 0x00,
+    0x41, 0x22, 0x54, 0xBB, 0x63, 0xB8, 0x93, 0x18, 0xF0, 0x17, 0x68, 0xBA,
+    0xCF, 0x3E, 0xEF, 0x4F, 0xD0, 0x67, 0xCE, 0x8F, 0x79, 0xA2, 0x24, 0x85,
+    0x23, 0x6B, 0x07, 0x25, 0x19, 0xC0, 0xB6, 0x7D, 0x44, 0xB9, 0x1C, 0xC2,
+    0x3A, 0xF4, 0x8B, 0x6B, 0x36, 0xD3, 0x6B, 0x7F, 0x38, 0x5F, 0x57, 0xA0,
+    0x98, 0x83, 0x5E, 0x85, 0x98, 0x29, 0x4F, 0xA0, 0x2D, 0x82, 0xAF, 0xCC,
+    0xC4, 0x04, 0xE7, 0xEA, 0x3E, 0xDB, 0x26, 0xD5, 0xF1, 0x26, 0x01, 0xE2,
+    0x8E, 0x3C, 0xE8, 0xF8, 0x20, 0xE0, 0xEC, 0x19, 0x82, 0xA0, 0x9E, 0x8F,
+    0xB1, 0x14, 0x88, 0x8E, 0xC3, 0x36, 0xD3, 0x1F, 0xA2, 0xC8, 0x3A, 0x11,
+    0xF2, 0x83, 0x32, 0xAA, 0x3B, 0xB5, 0x7E, 0x91, 0xD7, 0x0A, 0x31, 0xAE,
+    0xD2, 0xFC, 0x44, 0xAD, 0x34, 0x61, 0xCE, 0xB9, 0xCC, 0x68, 0xC2, 0x94,
+    0xD9, 0xAA, 0x51, 0x26, 0x27, 0x35, 0x50, 0xA7, 0xCE, 0x17, 0xCF, 0x19,
+    0xA1, 0xB4, 0x6D, 0xFA, 0x27, 0x70, 0x7A, 0x4D, 0x51, 0x2E, 0x6B, 0x10,
+    0xF7, 0x31, 0x66, 0x0A, 0x51, 0x91, 0xB9, 0x8E, 0xD8, 0xCA, 0xAC, 0xEB,
+    0x03, 0x46, 0xE5, 0x81, 0xA3, 0x99, 0x54, 0x55, 0x11, 0xFE, 0x75, 0x2D,
+    0x59, 0xD0, 0xB3, 0x11, 0x5E, 0x5A, 0xEF, 0xE2, 0xB0, 0x54, 0x2D, 0xAE,
+    0x11, 0x06, 0x34, 0xBE, 0x06, 0x57, 0xDB, 0xE3, 0x81, 0x69, 0xD9, 0x01,
+    0xD0, 0xBB, 0x42, 0x2C, 0xA1, 0x60, 0xA1, 0x40, 0xB1, 0x66, 0x03, 0x04,
+    0x82, 0xC2, 0xA1, 0x71, 0x48, 0xCC, 0x76, 0x41, 0x22, 0x93, 0x4A, 0x27,
+    0x73, 0xDA, 0x05, 0x06, 0x91, 0x4C, 0xA7, 0x56, 0x2C, 0x56, 0x4B, 0x45,
+    0xA6, 0xE1, 0x71, 0xB9, 0x5C, 0xEE, 0x97, 0x6B, 0xBD, 0xEE, 0xFB, 0x82,
+    0xC5, 0x63, 0x32, 0x99, 0x6C, 0xF6, 0x83, 0x45, 0xA8, 0xD5, 0x6D, 0x37,
+    0xDC, 0x0E, 0x0F, 0x23, 0x95, 0xD0, 0xE9, 0x77, 0x3B, 0xDE, 0x2F, 0x37,
+    0xBF, 0xED, 0xFD, 0x09, 0x41, 0xE1, 0x10, 0x98, 0x6C, 0x3A, 0x1F, 0x10,
+    0x8D, 0x47, 0xA5, 0xD3, 0x09, 0xB4, 0xF2, 0x85, 0x6B, 0xEA, 0x7A, 0x3E,
+    0x5F, 0x3F, 0xD4, 0x72, 0x3F, 0x24, 0x9D, 0x4F, 0xE8, 0x96, 0x6B, 0x3D,
+    0xBF, 0xF2, 0x11, 0x81, 0xC3, 0x27, 0xD6, 0x3B, 0xCF, 0xD3, 0xF1, 0xFE,
+    0xFF, 0x83, 0x01, 0xA0, 0xE8, 0x14, 0x1A, 0x31, 0x34, 0x9C, 0x58, 0x2D,
+    0x97, 0x8F, 0xB8, 0x40, 0x11, 0x7C, 0xBF, 0xFF, 0x01, 0x57, 0xEF, 0x80,
+    0x18, 0x16, 0x04, 0x01, 0x01, 0xF0, 0x00, 0x90, 0x28, 0x3C, 0x06, 0x01,
+    0x00, 0x40, 0x07, 0xC4, 0xE5, 0x42, 0x39, 0x91, 0x25, 0x42, 0x00, 0x03,
+};
+static const unsigned int kEmbeddedBigfont2Crm2Size = 1104u;
+
+static bool GL_LoadEmbeddedCrm2(const unsigned char* src, unsigned int srcSize, CrmFile& out)
+{
+	if (out.data)
+	{
+		std::free(out.data);
+		out.data = nullptr;
+	}
+	out.size = 0;
+
+	if (!src || srcSize == 0)
+	{
+		return false;
+	}
+
+	if (srcSize > 14 && GetSize((void*)src) != 0)
+	{
+		const unsigned int outSize = GetSize((void*)src);
+		const unsigned int headroom = GetSecDist((void*)src);
+		unsigned char* indata = static_cast<unsigned char*>(std::malloc(srcSize));
+		unsigned char* outdata = static_cast<unsigned char*>(std::malloc(outSize + headroom));
+		out.data = static_cast<unsigned char*>(std::malloc(outSize));
+		if (!indata || !outdata || !out.data)
+		{
+			if (indata) std::free(indata);
+			if (outdata) std::free(outdata);
+			if (out.data) std::free(out.data);
+			out.data = nullptr;
+			return false;
+		}
+
+		std::memcpy(indata, src, srcSize);
+		Decrunch(indata, outdata);
+		std::memcpy(out.data, outdata, outSize);
+		out.size = outSize;
+		std::free(indata);
+		std::free(outdata);
+		return true;
+	}
+
+	out.data = static_cast<unsigned char*>(std::malloc(srcSize));
+	if (!out.data)
+	{
+		return false;
+	}
+	std::memcpy(out.data, src, srcSize);
+	out.size = srcSize;
+	return true;
+}
+
+
 #ifdef __ANDROID__
 static void ConfigureAndroidDataRoot()
 {
-    // 1) Preferred: fixed OUYA-style path /sdcard/ZGloom/
-    const char* fixedRoot = "/sdcard/ZGloom/";
-    if (chdir(fixedRoot) == 0) {
-        Config::SetDataRoot(fixedRoot);
-        SDL_Log("ZGloom: Android DataRoot set to fixed '%s' (chdir OK)", fixedRoot);
-        return;
-    } else {
-        SDL_Log("ZGloom: chdir('%s') failed (errno=%d), falling back to SDL_AndroidGetExternalStoragePath()", fixedRoot, errno);
-    }
-
-    // 2) Fallback: SDL external storage path + "/ZGloom/"
+    // Preferred: app-specific external files dir used by Java installer:
+    //   getExternalFilesDir(null)/ZGloom
     const char* ext = SDL_AndroidGetExternalStoragePath();
     if (ext && *ext) {
         std::string root = std::string(ext);
@@ -66,6 +222,37 @@ static void ConfigureAndroidDataRoot()
         SDL_Log("ZGloom: SDL_AndroidGetExternalStoragePath() returned null; keeping default DataRoot");
     }
 }
+
+static void GL_AndroidSetBuildInfoOverlayVisible(bool visible)
+{
+    JNIEnv* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
+    jobject activity = static_cast<jobject>(SDL_AndroidGetActivity());
+
+    if (!env || !activity)
+        return;
+
+    jclass activityClass = env->GetObjectClass(activity);
+    if (!activityClass)
+    {
+        env->DeleteLocalRef(activity);
+        return;
+    }
+
+    const char* methodName = visible ? "showBuildInfoOverlay" : "hideBuildInfoOverlay";
+    jmethodID method = env->GetMethodID(activityClass, methodName, "()V");
+    if (method)
+    {
+        env->CallVoidMethod(activity, method);
+    }
+
+    if (env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+    }
+
+    env->DeleteLocalRef(activityClass);
+    env->DeleteLocalRef(activity);
+}
 #endif
 
 
@@ -75,7 +262,7 @@ static void ConfigureAndroidDataRoot()
 // It provides hudTex/hudLayer32 + helpers, and forward-declares the RendererHooks
 // functions so you don't need to include any new headers here.
 
-// (removed) // #include <SDL.h>
+// (removed) // #include <sdl2/SDL.h>
 
 // RendererHooks forward declarations removed (using included header)
 // Global HUD resources (stay internal to this TU)
@@ -111,6 +298,24 @@ static inline void ZHUD_Destroy() {
     if (g_ZHudTex) { SDL_DestroyTexture(g_ZHudTex); g_ZHudTex = nullptr; }
 }
 
+// Ensure HUD resources are valid for this frame (handle context loss / size change)
+static inline void ZHUD_EnsureAlive(SDL_Renderer* ren, int w, int h) {
+    // If nothing yet, just create fresh resources
+    if (!g_ZHudTex || !g_ZHudLayer32) {
+        ZHUD_EnsureCreated(ren, w, h);
+        return;
+    }
+
+    // Verify texture is still valid and matches expected size
+    Uint32 fmt = 0;
+    int access = 0, tw = 0, th = 0;
+    if (SDL_QueryTexture(g_ZHudTex, &fmt, &access, &tw, &th) != 0 || tw != w || th != h) {
+        // Renderer may have been reset or size changed; recreate HUD resources
+        ZHUD_Destroy();
+        ZHUD_EnsureCreated(ren, w, h);
+    }
+}
+
 // Convenience accessors if your code used 'hudTex' / 'hudLayer32' names before:
 #define hudTex      g_ZHudTex
 #define hudLayer32  g_ZHudLayer32
@@ -144,26 +349,36 @@ static void fill_audio(void *udata, Uint8 *stream, int len)
 	auto res = xmp_play_buffer((xmp_context)udata, stream, len, 0);
 }
 
-void LoadPic(std::string name, SDL_Surface* render8)
+static bool DecodePicFile(const std::string& name, std::vector<uint8_t>& pic, uint32_t& width)
 {
-	std::vector<uint8_t> pic;
 	CrmFile picfile;
-	CrmFile palfile;
-
-	bool ok_pic = picfile.Load(name.c_str());
-	bool ok_pal = palfile.Load((name + ".pal").c_str());
-
-	SDL_FillRect(render8, nullptr, 0);
-
-	if (!ok_pic || !ok_pal || picfile.data == nullptr || palfile.data == nullptr || palfile.size == 0)
+	if (!picfile.Load(name.c_str()) || !picfile.data || picfile.size < 12)
 	{
-		SDL_Log("ZGloom: LoadPic('%s') failed (missing .crm or .pal), leaving surface black", name.c_str());
-		return;
+		SDL_Log("ZGloom: DecodePicFile('%s') failed", name.c_str());
+		return false;
 	}
 
-	// is this some sort of weird AGA/ECS backwards compatible palette encoding? 4 MSBs, then LSBs?
-	// Update: Yes, yes it is. 
-	for (uint32_t c = 0; c < palfile.size / 4; c++)
+	IffHandler::DecodeIff(picfile.data, pic, width);
+	return (width > 0) && !pic.empty();
+}
+
+static bool ApplyPicPalette(const std::string& name, SDL_Surface* render8)
+{
+	if (!render8 || !render8->format || !render8->format->palette)
+	{
+		return false;
+	}
+
+	CrmFile palfile;
+	if (!palfile.Load((name + ".pal").c_str()) || !palfile.data || palfile.size == 0)
+	{
+		SDL_Log("ZGloom: ApplyPicPalette('%s') failed", name.c_str());
+		return false;
+	}
+
+	// Gloom palette format: Amiga-style 12-bit RGB high nibbles plus low nibbles.
+	const uint32_t numColours = std::min<uint32_t>(256, palfile.size / 4);
+	for (uint32_t c = 0; c < numColours; c++)
 	{
 		SDL_Color col;
 		col.a = 0xFF;
@@ -182,38 +397,67 @@ void LoadPic(std::string name, SDL_Surface* render8)
 		SDL_SetPaletteColors(render8->format->palette, &col, c, 1);
 	}
 
+	return true;
+}
+
+bool LoadPic(std::string name, SDL_Surface* render8)
+{
+	if (!render8)
+	{
+		return false;
+	}
+
+	std::vector<uint8_t> pic;
 	uint32_t width = 0;
-
-	IffHandler::DecodeIff(picfile.data, pic, width);
-
-	if (width == render8->w)
+	if (!DecodePicFile(name, pic, width))
 	{
-		if (pic.size() > (size_t)(render8->w * render8->h))
-		{
-			pic.resize(render8->w * render8->h);
-		}
-		std::copy(pic.begin(), pic.begin() + pic.size(), (uint8_t*)(render8->pixels));
+		SDL_FillRect(render8, nullptr, 0);
+		return false;
 	}
-	else
+
+	ApplyPicPalette(name, render8);
+	SDL_FillRect(render8, nullptr, 0);
+
+	const uint32_t height = width ? (uint32_t)(pic.size() / width) : 0;
+	const uint32_t copyW = std::min<uint32_t>(width, (uint32_t)render8->w);
+	const uint32_t copyH = std::min<uint32_t>(height, (uint32_t)render8->h);
+
+	for (uint32_t y = 0; y < copyH; y++)
 	{
-		// gloom 3 has some odd-sized intermission pictures. Do a line-by-line copy.
-
-		uint32_t p = 0;
-		uint32_t y = 0;
-
-		if (pic.size() > (width * render8->h))
-		{
-			pic.resize(width * render8->h);
-		}
-
-		while (p < pic.size())
-		{
-			std::copy(pic.begin() + p, pic.begin() + p + render8->w, (uint8_t*)(render8->pixels) + y*render8->pitch);
-
-			p += width;
-			y++;
-		}
+		const uint8_t* src = pic.data() + y * width;
+		uint8_t* dst = (uint8_t*)render8->pixels + y * render8->pitch;
+		std::copy(src, src + copyW, dst);
 	}
+
+	return true;
+}
+
+static bool OverlayPicAt(const std::string& name, SDL_Surface* render8, int dstY)
+{
+	if (!render8 || dstY >= render8->h)
+	{
+		return false;
+	}
+
+	std::vector<uint8_t> pic;
+	uint32_t width = 0;
+	if (!DecodePicFile(name, pic, width))
+	{
+		return false;
+	}
+
+	const uint32_t height = width ? (uint32_t)(pic.size() / width) : 0;
+	const uint32_t copyW = std::min<uint32_t>(width, (uint32_t)render8->w);
+	const uint32_t copyH = std::min<uint32_t>(height, (uint32_t)std::max(0, render8->h - dstY));
+
+	for (uint32_t y = 0; y < copyH; y++)
+	{
+		const uint8_t* src = pic.data() + y * width;
+		uint8_t* dst = (uint8_t*)render8->pixels + (dstY + y) * render8->pitch;
+		std::copy(src, src + copyW, dst);
+	}
+
+	return true;
 }
 
 enum GameState
@@ -223,9 +467,553 @@ enum GameState
 	STATE_SPOOLING,
 	STATE_WAITING,
 	STATE_MENU,
+	STATE_SPLASH,
 	STATE_TITLE
 };
 
+
+bool g_RequestSavePosition = false;
+bool g_RequestTitleContinue = false;
+
+
+// ------------------------- Multi-game launcher support -------------------------
+
+struct GameInstall
+{
+    std::string baseDir; // "" = current folder, otherwise subdirectory
+    std::string label;   // human-readable name (e.g., "Gloom Deluxe")
+    bool isZM;           // true if pure Zombie Massacre layout (stuf/stages without misc/script)
+};
+
+static inline bool GL_FileExistsIn(const std::string& baseDir, const char* relPath)
+{
+    std::string full;
+    if (!baseDir.empty())
+    {
+        full = baseDir;
+        if (!full.empty() && full.back() != '/' && full.back() != '\\')
+            full.push_back('/');
+        full += relPath;
+    }
+    else
+    {
+        full = relPath;
+    }
+
+    FILE* f = fopen(full.c_str(), "rb");
+    if (f)
+    {
+        fclose(f);
+        return true;
+    }
+    return false;
+}
+
+static std::string GL_ToLower(const std::string& sIn)
+{
+    std::string s = sIn;
+    for (size_t i = 0; i < s.size(); ++i)
+        s[i] = (char)std::tolower((unsigned char)s[i]);
+    return s;
+}
+
+static std::string GL_TitleCaseFromDir(const std::string& dirName)
+{
+    std::string s = dirName;
+    bool newWord = true;
+    for (size_t i = 0; i < s.size(); ++i)
+    {
+        unsigned char c = (unsigned char)s[i];
+        if (std::isspace(c) || c == '_' || c == '-' || c == '.')
+        {
+            if (c == '_' || c == '-' || c == '.')
+                s[i] = ' ';
+            newWord = true;
+        }
+        else
+        {
+            if (newWord)
+                s[i] = (char)std::toupper(c);
+            else
+                s[i] = (char)std::tolower(c);
+            newWord = false;
+        }
+    }
+    return s;
+}
+
+static std::string GL_MakeInstallLabel(const std::string& dirName, bool hasGloom, bool hasZM)
+{
+    // Current folder: prefer semantic names
+    if (dirName.empty())
+    {
+        if (hasZM && !hasGloom)  return "Zombie Massacre";
+        if (hasGloom && !hasZM)  return "Gloom";
+        if (hasGloom && hasZM)   return "Gloom / Zombie Massacre";
+        return "Current folder";
+    }
+
+    std::string lower = GL_ToLower(dirName);
+
+    // Explicit special cases
+    if (lower.find("8bitkiller") != std::string::npos || lower.find("8bit_killer") != std::string::npos)
+        return "8Bit Killer";
+
+    if (lower.find("deathmask") != std::string::npos || lower.find("death_mask") != std::string::npos)
+        return "Death Mask";
+
+    if (hasZM && !hasGloom)
+        return "Zombie Massacre";
+
+    if (lower.find("gloom3") != std::string::npos || lower.find("gloom 3") != std::string::npos || lower.find("gloom_3") != std::string::npos)
+        return "Gloom 3";
+
+    if (lower.find("deluxe") != std::string::npos)
+        return "Gloom Deluxe";
+
+    if (lower.find("classic") != std::string::npos)
+        return "Gloom Classic";
+
+    if (lower.find("gloom") != std::string::npos)
+        return "Gloom";
+
+    if (lower.find("zombie") != std::string::npos || lower.find("massacre") != std::string::npos)
+        return "Zombie Massacre";
+
+    if (hasGloom)
+        return GL_TitleCaseFromDir(dirName);
+
+    if (hasZM)
+        return "Zombie Massacre";
+
+    return GL_TitleCaseFromDir(dirName);
+}
+
+static void GL_TryAddInstall(const std::string& baseDir, std::vector<GameInstall>& out)
+{
+    bool hasGloom = GL_FileExistsIn(baseDir, "misc/script");
+    bool hasZM    = GL_FileExistsIn(baseDir, "stuf/stages");
+
+    if (!hasGloom && !hasZM)
+        return;
+
+    GameInstall gi;
+    gi.baseDir = baseDir;
+    gi.isZM    = hasZM && !hasGloom;
+    gi.label   = GL_MakeInstallLabel(baseDir, hasGloom, hasZM);
+    out.push_back(gi);
+}
+
+static void GL_DiscoverGameInstalls(std::vector<GameInstall>& out)
+{
+    out.clear();
+
+    // Current folder first
+    GL_TryAddInstall(std::string(), out);
+
+    // One level of subdirectories
+#ifdef _WIN32
+    struct _finddata_t info;
+    intptr_t handle = _findfirst("*", &info);
+    if (handle != -1)
+    {
+        do
+        {
+            if (info.attrib & _A_SUBDIR)
+            {
+                if (std::strcmp(info.name, ".") == 0 || std::strcmp(info.name, "..") == 0)
+                    continue;
+                GL_TryAddInstall(info.name, out);
+            }
+        } while (_findnext(handle, &info) == 0);
+        _findclose(handle);
+    }
+#else
+    DIR* dir = opendir(".");
+    if (dir)
+    {
+        struct dirent* ent;
+        while ((ent = readdir(dir)) != nullptr)
+        {
+            const char* name = ent->d_name;
+            if (!name || name[0] == '.')
+                continue;
+
+            std::string dname(name);
+
+            struct stat st;
+            if (stat(dname.c_str(), &st) == 0 && S_ISDIR(st.st_mode))
+            {
+                GL_TryAddInstall(dname, out);
+            }
+        }
+        closedir(dir);
+    }
+#endif
+}
+
+// ------------------------- Minimal 8x8 bitmap font for launcher ----------------
+
+struct LauncherGlyph8 { char c; unsigned char r[8]; };
+
+static const LauncherGlyph8 kLaunchFont8[] =
+{
+    {' ', {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}},
+    {'A',{0x18,0x24,0x42,0x7E,0x42,0x42,0x42,0x00}},
+    {'B',{0x7C,0x42,0x42,0x7C,0x42,0x42,0x7C,0x00}},
+    {'C',{0x3C,0x42,0x40,0x40,0x40,0x42,0x3C,0x00}},
+    {'D',{0x78,0x44,0x42,0x42,0x42,0x44,0x78,0x00}},
+    {'E',{0x7E,0x40,0x40,0x7C,0x40,0x40,0x7E,0x00}},
+    {'F',{0x7E,0x40,0x40,0x7C,0x40,0x40,0x40,0x00}},
+    {'G',{0x3C,0x42,0x40,0x4E,0x42,0x42,0x3C,0x00}},
+    {'H',{0x42,0x42,0x42,0x7E,0x42,0x42,0x42,0x00}},
+    {'I',{0x38,0x10,0x10,0x10,0x10,0x10,0x38,0x00}},
+    {'J',{0x02,0x02,0x02,0x02,0x42,0x42,0x3C,0x00}},
+    {'K',{0x42,0x44,0x48,0x70,0x48,0x44,0x42,0x00}},
+    {'L',{0x40,0x40,0x40,0x40,0x40,0x40,0x7E,0x00}},
+    {'M',{0x42,0x66,0x5A,0x42,0x42,0x42,0x42,0x00}},
+    {'N',{0x42,0x62,0x52,0x4A,0x46,0x42,0x42,0x00}},
+    {'O',{0x3C,0x42,0x42,0x42,0x42,0x42,0x3C,0x00}},
+    {'P',{0x7C,0x42,0x42,0x7C,0x40,0x40,0x40,0x00}},
+    {'Q',{0x3C,0x42,0x42,0x42,0x4A,0x44,0x3A,0x00}},
+    {'R',{0x7C,0x42,0x42,0x7C,0x48,0x44,0x42,0x00}},
+    {'S',{0x3C,0x40,0x40,0x3C,0x02,0x02,0x3C,0x00}},
+    {'T',{0x7C,0x10,0x10,0x10,0x10,0x10,0x10,0x00}},
+    {'U',{0x42,0x42,0x42,0x42,0x42,0x42,0x3C,0x00}},
+    {'V',{0x42,0x42,0x42,0x42,0x42,0x24,0x18,0x00}},
+    {'W',{0x42,0x42,0x42,0x42,0x5A,0x66,0x42,0x00}},
+    {'X',{0x42,0x42,0x24,0x18,0x24,0x42,0x42,0x00}},
+    {'Y',{0x44,0x44,0x28,0x10,0x10,0x10,0x10,0x00}},
+    {'Z',{0x7E,0x02,0x04,0x18,0x20,0x40,0x7E,0x00}},
+    {'0',{0x3C,0x46,0x4A,0x52,0x62,0x46,0x3C,0x00}},
+    {'1',{0x10,0x30,0x10,0x10,0x10,0x10,0x38,0x00}},
+    {'2',{0x3C,0x42,0x02,0x04,0x18,0x20,0x7E,0x00}},
+    {'3',{0x3C,0x42,0x02,0x1C,0x02,0x42,0x3C,0x00}},
+    {'4',{0x04,0x0C,0x14,0x24,0x44,0x7E,0x04,0x00}},
+    {'5',{0x7E,0x40,0x7C,0x02,0x02,0x42,0x3C,0x00}},
+    {'6',{0x1C,0x20,0x40,0x7C,0x42,0x42,0x3C,0x00}},
+    {'7',{0x7E,0x02,0x04,0x08,0x10,0x10,0x10,0x00}},
+    {'8',{0x3C,0x42,0x42,0x3C,0x42,0x42,0x3C,0x00}},
+    {'9',{0x3C,0x42,0x42,0x3E,0x02,0x04,0x38,0x00}},
+    {':',{0x00,0x18,0x18,0x00,0x18,0x18,0x00,0x00}},
+    {'-',{0x00,0x00,0x00,0x7E,0x00,0x00,0x00,0x00}},
+    {'.',{0x00,0x00,0x00,0x00,0x00,0x18,0x18,0x00}},
+    {',',{0x00,0x00,0x00,0x00,0x00,0x18,0x18,0x10}},
+    {'(',{0x0C,0x10,0x20,0x20,0x20,0x10,0x0C,0x00}},
+    {')',{0x30,0x08,0x04,0x04,0x04,0x08,0x30,0x00}},
+};
+
+static const unsigned char* GL_FontRows(char c)
+{
+    if (c >= 'a' && c <= 'z')
+        c = (char)(c - 32);
+    for (size_t i = 0; i < sizeof(kLaunchFont8) / sizeof(kLaunchFont8[0]); ++i)
+    {
+        if (kLaunchFont8[i].c == c)
+            return kLaunchFont8[i].r;
+    }
+    return kLaunchFont8[0].r; // space fallback
+}
+
+static void GL_DrawGlyph8(SDL_Renderer* ren, int x, int y, char c, int scale, const SDL_Color& col)
+{
+    const unsigned char* rows = GL_FontRows(c);
+    SDL_SetRenderDrawColor(ren, col.r, col.g, col.b, col.a);
+    for (int row = 0; row < 8; ++row)
+    {
+        unsigned char bits = rows[row];
+        for (int colx = 0; colx < 8; ++colx)
+        {
+            if (bits & (0x80 >> colx))
+            {
+                SDL_Rect r;
+                r.x = x + colx * scale;
+                r.y = y + row * scale;
+                r.w = scale;
+                r.h = scale;
+                SDL_RenderFillRect(ren, &r);
+            }
+        }
+    }
+}
+
+static int GL_TextWidth(const std::string& text, int scale)
+{
+    int n = 0;
+    for (size_t i = 0; i < text.size(); ++i)
+    {
+        if (text[i] != '\n')
+            ++n;
+    }
+    return n * 8 * scale;
+}
+
+static void GL_DrawText(SDL_Renderer* ren, int x, int y, const std::string& text, int scale, const SDL_Color& col)
+{
+    int cx = x;
+    int cy = y;
+    for (size_t i = 0; i < text.size(); ++i)
+    {
+        char ch = text[i];
+        if (ch == '\n')
+        {
+            cy += 8 * scale + 2;
+            cx = x;
+            continue;
+        }
+        GL_DrawGlyph8(ren, cx, cy, ch, scale, col);
+        cx += 8 * scale;
+    }
+}
+
+
+// Launcher window: background + big centered list with fade-out
+static bool GL_RunGameLauncher(const std::vector<GameInstall>& installs, GameInstall& outSelection)
+{
+    if (installs.empty())
+        return false;
+
+    // Determine window size & which background to use (match actual display size)
+    int winW = 960;
+    int winH = 720;
+    bool useWideBG = false;
+
+    SDL_DisplayMode dm;
+    if (SDL_GetCurrentDisplayMode(0, &dm) == 0 && dm.w > 0 && dm.h > 0)
+    {
+        float aspect = dm.w / (float)dm.h;
+        useWideBG = (aspect > 1.5f); // 16:9 vs 4:3/5:4 etc.
+
+        // Use the real display size to avoid affecting game scaling
+        winW = dm.w;
+        winH = dm.h;
+    }
+
+    SDL_Window* win = SDL_CreateWindow(
+        "ZGloom Launcher",
+        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+        winW, winH,
+        SDL_WINDOW_SHOWN);
+
+    if (!win)
+        return false;
+
+    Uint32 renderFlags = SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC;
+    SDL_Renderer* ren = SDL_CreateRenderer(win, -1, renderFlags);
+    if (!ren)
+    {
+        SDL_DestroyWindow(win);
+        return false;
+    }
+
+    SDL_Texture* bgTex = nullptr;
+    {
+        const unsigned char* bgData = useWideBG ? kLauncherBG_16_9_BMP : kLauncherBG_4_3_BMP;
+        int bgSize = useWideBG ? (int)sizeof(kLauncherBG_16_9_BMP) : (int)sizeof(kLauncherBG_4_3_BMP);
+        SDL_RWops* rw = SDL_RWFromConstMem(bgData, bgSize);
+        SDL_Surface* bg = rw ? SDL_LoadBMP_RW(rw, 1) : nullptr;
+        if (bg)
+        {
+            bgTex = SDL_CreateTextureFromSurface(ren, bg);
+            SDL_FreeSurface(bg);
+        }
+    }
+
+    const SDL_Color colTitle     = { 255, 255, 255, 255 };
+    const SDL_Color colNormal    = { 255, 255, 255, 255 };
+    const SDL_Color colSelected  = { 255, 230, 100, 255 };
+
+    // Font scales
+    const int scaleTitle     = 7; // SELECT GAME
+    const int scaleList      = 7; // Spieleliste
+    const int scaleHint      = 4; // etwas kleiner fuer Hint-Zeile
+
+    // Uppercase labels for drawing
+    std::vector<std::string> labelsUpper;
+    labelsUpper.reserve(installs.size());
+    for (size_t i = 0; i < installs.size(); ++i)
+    {
+        std::string s = installs[i].label;
+        for (size_t j = 0; j < s.size(); ++j)
+            s[j] = (char)std::toupper((unsigned char)s[j]);
+        labelsUpper.push_back(s);
+    }
+
+    const std::string title     = "SELECT GAME";
+    const std::string hint      = "DPAD TO MOVE     A TO START     B TO EXIT";
+
+    const int fontHTitle     = 8 * scaleTitle;
+    const int fontHHint      = 8 * scaleHint;
+    const int fontHList      = 8 * scaleList;
+    const int listGap        = fontHList / 2;
+
+    // Titel oben, Hint direkt darunter (beide zentriert)
+    const int titleY = winH / 12;
+    const int hintY  = titleY + fontHTitle + fontHHint / 2;
+
+    // Spieleliste vertikal zentriert
+    const int numEntries       = (int)installs.size();
+    const int listBlockHeight  = numEntries * fontHList + (numEntries - 1) * listGap;
+    const int listY0           = (winH - listBlockHeight) / 2;
+
+    bool running  = true;
+    int  selected = 0;
+
+    // Optional: erstes Gamepad oeffnen
+    SDL_GameController* pad = nullptr;
+    for (int i = 0; i < SDL_NumJoysticks(); ++i)
+    {
+        if (SDL_IsGameController(i))
+        {
+            pad = SDL_GameControllerOpen(i);
+            if (pad)
+                break;
+        }
+    }
+
+    while (running)
+    {
+        SDL_Event e;
+        while (SDL_PollEvent(&e))
+        {
+            if (e.type == SDL_QUIT)
+            {
+                selected = -1;
+                running = false;
+                break;
+            }
+            else if (e.type == SDL_KEYDOWN)
+            {
+                switch (e.key.keysym.sym)
+                {
+                case SDLK_UP:
+                    if (selected > 0) --selected;
+                    else selected = numEntries - 1;
+                    break;
+                case SDLK_DOWN:
+                    if (selected < numEntries - 1) ++selected;
+                    else selected = 0;
+                    break;
+                case SDLK_RETURN:
+                case SDLK_KP_ENTER:
+                    running = false;
+                    break;
+                case SDLK_ESCAPE:
+                    selected = -1;
+                    running = false;
+                    break;
+                default:
+                    break;
+                }
+            }
+            else if (e.type == SDL_CONTROLLERBUTTONDOWN)
+            {
+                switch (e.cbutton.button)
+                {
+                case SDL_CONTROLLER_BUTTON_DPAD_UP:
+                    if (selected > 0) --selected;
+                    else selected = numEntries - 1;
+                    break;
+                case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
+                    if (selected < numEntries - 1) ++selected;
+                    else selected = 0;
+                    break;
+                case SDL_CONTROLLER_BUTTON_A:
+                    running = false;
+                    break;
+                case SDL_CONTROLLER_BUTTON_B:
+                    selected = -1;
+                    running = false;
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+
+        if (!running)
+            break;
+
+        if (bgTex)
+        {
+            SDL_RenderClear(ren);
+            SDL_RenderCopy(ren, bgTex, nullptr, nullptr);
+        }
+        else
+        {
+            SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
+            SDL_RenderClear(ren);
+        }
+
+        // Titel oben mittig
+        int titleW = GL_TextWidth(title, scaleTitle);
+        int titleX = (winW - titleW) / 2;
+        GL_DrawText(ren, titleX, titleY, title, scaleTitle, colTitle);
+
+        // Hint-Zeile darunter, mittig
+        int hintW = GL_TextWidth(hint, scaleHint);
+        int hintX = (winW - hintW) / 2;
+        GL_DrawText(ren, hintX, hintY, hint, scaleHint, colNormal);
+
+        // Spieleliste mittig
+        for (int i = 0; i < numEntries; ++i)
+        {
+            const SDL_Color& col = (i == selected) ? colSelected : colNormal;
+            int w  = GL_TextWidth(labelsUpper[i], scaleList);
+            int x  = (winW - w) / 2;
+            int y  = listY0 + i * (fontHList + listGap);
+            GL_DrawText(ren, x, y, labelsUpper[i], scaleList, col);
+        }
+
+
+        SDL_RenderPresent(ren);
+        SDL_Delay(16);
+    }
+
+    int resultIndex = selected;
+
+    // Fade-out (0.6 s) if a game was selected
+    if (resultIndex >= 0)
+    {
+        const int fadeFrames  = 24;
+        const int fadeDelayMs = 25; // 24 * 25 ms = 600 ms
+
+        SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+
+        for (int i = 0; i < fadeFrames; ++i)
+        {
+            float t = (float)(i + 1) / (float)fadeFrames;
+            Uint8 alpha = (Uint8)(t * 255.0f + 0.5f);
+
+            SDL_SetRenderDrawColor(ren, 0, 0, 0, alpha);
+            SDL_RenderFillRect(ren, nullptr);
+            SDL_RenderPresent(ren);
+            SDL_Delay(fadeDelayMs);
+        }
+
+        SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+    }
+
+    if (pad)
+        SDL_GameControllerClose(pad);
+    if (bgTex)
+        SDL_DestroyTexture(bgTex);
+    SDL_DestroyRenderer(ren);
+    SDL_DestroyWindow(win);
+
+    if (resultIndex < 0)
+        return false;
+
+    outSelection = installs[resultIndex];
+    return true;
+}
+
+
+
+static inline bool GL_IsMenuToggleKey(SDL_Keycode sym)
+{
+	return sym == SDLK_MENU || sym == SDLK_APPLICATION;
+}
 
 int main(int argc, char* argv[])
 {
@@ -234,22 +1022,104 @@ int main(int argc, char* argv[])
 	SDL_Log("ZGloom: running on Android");
 #endif
 
-	/* AUTODETECT ZM FIRST!*/
-	if (FILE* file = fopen("stuf/stages", "r"))
-	{
-		fclose(file);
-		Config::SetZM(true);
-	}
-
+	// Initialize SDL first (for launcher + gamepad)
 	if (SDL_Init(SDL_INIT_TIMER | SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) != 0)
 	{
 		std::cout << "SDL_Init Error: " << SDL_GetError() << std::endl;
 		return 1;
 	}
-	// SDL needs to be inited before this to pick up gamepad
+
 #ifdef __ANDROID__
+	// SDL needs to be inited before this to pick up gamepad and Android paths
 	ConfigureAndroidDataRoot();
 #endif
+
+	// Discover compatible game installs (current DataRoot + subdirectories)
+	std::vector<GameInstall> installs;
+	GL_DiscoverGameInstalls(installs);
+
+	if (installs.empty())
+	{
+		// Fallback: original Zombie Massacre auto-detect in current DataRoot
+		if (FILE* file = fopen("stuf/stages", "rb"))
+		{
+			fclose(file);
+			Config::SetZM(true);
+		}
+	}
+	else
+	{
+		GameInstall chosen;
+
+		if (installs.size() == 1)
+		{
+			chosen = installs[0];
+#ifdef __ANDROID__
+			GL_AndroidSetBuildInfoOverlayVisible(false);
+#endif
+		}
+		else
+		{
+#ifdef __ANDROID__
+			GL_AndroidSetBuildInfoOverlayVisible(true);
+#endif
+			if (!GL_RunGameLauncher(installs, chosen))
+			{
+#ifdef __ANDROID__
+				GL_AndroidSetBuildInfoOverlayVisible(false);
+#endif
+				SDL_Quit();
+				return 0;
+			}
+#ifdef __ANDROID__
+			GL_AndroidSetBuildInfoOverlayVisible(false);
+#endif
+		}
+
+#ifdef __ANDROID__
+		// Refine DataRoot to chosen subfolder and chdir there
+		std::string root = Config::GetDataRoot();
+		if (!root.empty())
+		{
+			char last = root.back();
+			if (last != '/' && last != '\\')
+				root.push_back('/');
+		}
+
+		if (!chosen.baseDir.empty())
+		{
+			root += chosen.baseDir;
+			if (!root.empty())
+			{
+				char last2 = root.back();
+				if (last2 != '/' && last2 != '\\')
+					root.push_back('/');
+			}
+
+			Config::SetDataRoot(root);
+			if (chdir(root.c_str()) != 0)
+			{
+				SDL_Log("ZGloom: chdir('%s') to chosen DataRoot failed (errno=%d)", root.c_str(), errno);
+			}
+			else
+			{
+				SDL_Log("ZGloom: chdir to chosen DataRoot OK");
+			}
+		}
+#else
+		if (!chosen.baseDir.empty())
+		{
+#ifdef _WIN32
+			_chdir(chosen.baseDir.c_str());
+#else
+			chdir(chosen.baseDir.c_str());
+#endif
+		}
+#endif // __ANDROID__
+
+		Config::SetZM(chosen.isZM);
+	}
+
 	SDL_Log("ZGloom: SDL_Init succeeded, calling Config::Init()");
 	Config::Init();
 	AtmosphereVolume::LoadFromConfig();
@@ -335,6 +1205,8 @@ int main(int argc, char* argv[])
 	SDL_Surface* render8 = SDL_CreateRGBSurface(0, 320, 256, 8, 0, 0, 0, 0);
 	SDL_Surface* intermissionscreen = SDL_CreateRGBSurface(0, 320, 256, 8, 0, 0, 0, 0);
 	SDL_Surface* titlebitmap = SDL_CreateRGBSurface(0, 320, 256, 8, 0, 0, 0, 0);
+	SDL_Surface* titlemenubitmap = SDL_CreateRGBSurface(0, 320, 256, 8, 0, 0, 0, 0);
+	SDL_Surface* splashbitmap = SDL_CreateRGBSurface(0, 320, 256, 8, 0, 0, 0, 0);
 	SDL_Surface* render32 = SDL_CreateRGBSurface(0, renderwidth, renderheight, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
 	SDL_Surface* screen32 = SDL_CreateRGBSurface(0, 320, 256, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
 
@@ -362,36 +1234,68 @@ int main(int argc, char* argv[])
 #if 1
 	Font smallfont, bigfont;
 	CrmFile fontfile;
-	SDL_Log("ZGloom: loading fonts (bigfont2/smallfont/bigfont)");
-	fontfile.Load((Config::GetMiscDir() + "bigfont2.bin").c_str());
-	if (fontfile.data)
+	SDL_Log("ZGloom: loading embedded bigfont2/smallfont fallback fonts");
+	if (GL_LoadEmbeddedCrm2(kEmbeddedBigfont2Crm2, kEmbeddedBigfont2Crm2Size, fontfile))
 	{
 		bigfont.Load2(fontfile);
 		smallfont.Load2(fontfile);
 	}
 	else
 	{
-		fontfile.Load((Config::GetMiscDir() + "smallfont.bin").c_str());
-		if (fontfile.data)smallfont.Load(fontfile);
-		fontfile.Load((Config::GetMiscDir() + "bigfont.bin").c_str());
-		if (fontfile.data)bigfont.Load(fontfile);
+		fontfile.Load((Config::GetMiscDir() + "bigfont2.bin").c_str());
+		if (fontfile.data)
+		{
+			bigfont.Load2(fontfile);
+			smallfont.Load2(fontfile);
+		}
+		else
+		{
+			fontfile.Load((Config::GetMiscDir() + "smallfont.bin").c_str());
+			if (fontfile.data)smallfont.Load(fontfile);
+			fontfile.Load((Config::GetMiscDir() + "bigfont.bin").c_str());
+			if (fontfile.data)bigfont.Load(fontfile);
+		}
 	}
 	SDL_Log("ZGloom: fonts loaded");
 #endif
 
-	SDL_Log("ZGloom: loading title picture");
-	titlepic.Load((Config::GetPicsDir() + "title").c_str());
+	SDL_Log("ZGloom: loading original-style title flow pictures");
+	const bool haveSplash = LoadPic(Config::GetPicsDir() + "blackmagic", splashbitmap);
+	const bool haveTitle = LoadPic(Config::GetPicsDir() + "title", titlebitmap);
 
-	if (titlepic.data)
+	if (haveTitle)
 	{
-		SDL_Log("ZGloom: title picture found, calling LoadPic(title)");
-		LoadPic(Config::GetPicsDir() + "title", titlebitmap);
+		SDL_SetPaletteColors(titlemenubitmap->format->palette, titlebitmap->format->palette->colors, 0, 256);
+		SDL_BlitSurface(titlebitmap, nullptr, titlemenubitmap, nullptr);
+
+		// Retail game data uses pics/gloom for the logo overlay.
+		// Keep gloombrush as a harmless fallback for older/private data sets.
+		if (!OverlayPicAt(Config::GetPicsDir() + "gloom", titlemenubitmap, 168))
+		{
+			OverlayPicAt(Config::GetPicsDir() + "gloombrush", titlemenubitmap, 168);
+		}
+	}
+	else if (haveSplash)
+	{
+		SDL_Log("ZGloom: title picture missing, using blackmagic as title fallback");
+		SDL_SetPaletteColors(titlebitmap->format->palette, splashbitmap->format->palette->colors, 0, 256);
+		SDL_BlitSurface(splashbitmap, nullptr, titlebitmap, nullptr);
+		SDL_SetPaletteColors(titlemenubitmap->format->palette, splashbitmap->format->palette->colors, 0, 256);
+		SDL_BlitSurface(splashbitmap, nullptr, titlemenubitmap, nullptr);
 	}
 	else
 	{
-		SDL_Log("ZGloom: title picture missing, calling LoadPic(blackmagic)");
-		LoadPic(Config::GetPicsDir() + "blackmagic", titlebitmap);
+		SDL_Log("ZGloom: neither title nor blackmagic found, using black title screen");
+		SDL_FillRect(titlebitmap, nullptr, 0);
+		SDL_FillRect(titlemenubitmap, nullptr, 0);
 	}
+
+	if (haveSplash && haveTitle)
+	{
+		state = STATE_SPLASH;
+	}
+	uint32_t splashStartTicks = SDL_GetTicks();
+	const uint32_t splashDurationMs = 1200;
 
 	if (titlemusic.data)
 	{
@@ -442,8 +1346,9 @@ int main(int argc, char* argv[])
 
 	while (notdone)
 	{
+		ZHUD_EnsureAlive(ren, renderwidth, renderheight);
 		RendererHooks::beginFrame();
-		SDL_FillRect(hudLayer32, NULL, 0x00000000);
+		ZHUD_Clear();
 		if ((state == STATE_PARSING) || (state == STATE_SPOOLING))
 		{
 			std::string scriptstring;
@@ -470,9 +1375,15 @@ int main(int argc, char* argv[])
 				case Script::SOP_LOADFLAT:
 				{
 					//improve this, only supports 9 flats
-					gmap.SetFlat(scriptstring[0] - '0');
+					int flat = scriptstring[0] - '0';
+					gmap.SetFlat(flat);
+					SaveSystem::SetCurrentFlat(flat);
 					break;
 				}
+				case Script::SOP_LOADMAP:
+				case Script::SOP_NOP:
+					// No action needed here in intermission script
+					break;
 				case Script::SOP_TEXT:
 				{
 					 intermissiontext = scriptstring;
@@ -542,16 +1453,79 @@ int main(int argc, char* argv[])
 					if (state == STATE_PARSING)
 					{
 
-						cam.x.SetInt(0);
-						cam.y = 120;
-						cam.z.SetInt(0);
-						cam.rotquick.SetInt(0);
-						scriptstring.insert(0, Config::GetLevelDir());
-						gmap.Load(scriptstring.c_str(), &objgraphics);
-						//gmap.Load("maps/map1_4", &objgraphics);
-						renderer.Init(render32, &gmap, &objgraphics);
-						logic.InitLevel(&gmap, &cam, &objgraphics);
-						state = STATE_PLAYING;
+					// Determine which level to load: script default or saved position
+					std::string levelRel = scriptstring;
+					SaveSystem::SaveData s;
+					bool haveSavePos = false;
+					bool haveReplay  = false;
+
+					// For each new PLAY operation we start from a clean event history
+					EventReplay::Clear();
+
+					if (g_RequestTitleContinue)
+					{
+						g_RequestTitleContinue = false;
+						if (SaveSystem::LoadFromDisk(s))
+						{
+							levelRel    = s.levelPath;
+							haveSavePos = true;
+							SaveSystem::SetCurrentFlat(s.flatIndex);
+							script.SeekAfterPlayFor(levelRel);
+
+							// EventReplay: load stored event history for this save
+							if (EventReplay::LoadFromDisk())
+								haveReplay = true;
+						}
+					}
+
+					// Remember level path (relative) for save/resume
+					SaveSystem::SetCurrentLevelPath(levelRel);
+
+					// Default camera for new game; may be overridden by saved data
+					cam.x.SetInt(0);
+					cam.y = 120;
+					cam.z.SetInt(0);
+					cam.rotquick.SetInt(0);
+
+					// Build full path and load requested level
+					std::string levelFull = levelRel;
+					levelFull.insert(0, Config::GetLevelDir());
+					gmap.Load(levelFull.c_str(), &objgraphics);
+					//gmap.Load("maps/map1_4", &objgraphics);
+					renderer.Init(render32, &gmap, &objgraphics);
+					logic.InitLevel(&gmap, &cam, &objgraphics);
+
+					// EventReplay: after the map is fully initialised, restore button/door state
+					if (haveReplay)
+					{
+						EventReplay::ReplayAll(gmap);
+					}
+
+					// If we continue from a save, restore camera and player state
+					if (haveSavePos)
+					{
+						cam.x.SetInt(s.camX);
+						cam.y = s.camY;
+						cam.z.SetInt(s.camZ);
+						cam.rotquick.SetInt(s.camRot);
+
+						// Restore player stats (HP, weapon, reload state)
+						for (auto& o : gmap.GetMapObjects())
+						{
+							if (o.t == ObjectGraphics::OLT_PLAYER1)
+							{
+								o.data.ms.hitpoints = s.hp;
+								o.data.ms.weapon    = s.weapon;
+								o.data.ms.reload    = s.reload;
+								o.data.ms.reloadcnt = s.reloadcnt;
+								break;
+							}
+						}
+					}
+
+
+					state = STATE_PLAYING;
+
 
 						// Start embedded atmosphere BGM for each level (Vita-style)
 						BGM::PlayLooping();
@@ -604,10 +1578,20 @@ int main(int argc, char* argv[])
 			}
 		}
 
-		if (state == STATE_TITLE)
+		if (state == STATE_SPLASH)
 		{
-			SDL_SetPaletteColors(render8->format->palette, titlebitmap->format->palette->colors, 0, 256);
-			titlescreen.Render(titlebitmap, render8, smallfont);
+			SDL_SetPaletteColors(render8->format->palette, splashbitmap->format->palette->colors, 0, 256);
+			SDL_BlitSurface(splashbitmap, nullptr, render8, nullptr);
+			if (SDL_GetTicks() - splashStartTicks >= splashDurationMs)
+			{
+				state = STATE_TITLE;
+			}
+		}
+		else if (state == STATE_TITLE)
+		{
+			SDL_Surface* titleSource = titlescreen.WantsPlainTitleBackground() ? titlebitmap : titlemenubitmap;
+			SDL_SetPaletteColors(render8->format->palette, titleSource->format->palette->colors, 0, 256);
+			titlescreen.Render(titleSource, render8, smallfont);
 		}
 
 		while ((state!= STATE_SPOOLING) && SDL_PollEvent(&sEvent))
@@ -622,8 +1606,15 @@ int main(int argc, char* argv[])
 
 			if (Config::HaveController() && (sEvent.type == SDL_CONTROLLERBUTTONDOWN))
 			{
+				// START/GUIDE/Menu is a true pause-menu toggle: open in-game, close in-game menu again.
+				if (state == STATE_MENU && Config::GetControllerStart())
+				{
+					state = STATE_PLAYING;
+					continue;
+				}
+
 				//fake up a key event
-				if ((state == STATE_TITLE) || (state == STATE_MENU) || (state == STATE_WAITING))
+				if ((state == STATE_SPLASH) || (state == STATE_TITLE) || (state == STATE_MENU) || (state == STATE_WAITING))
 				{
 					// Confirm / activate (menus only)
 					if (Config::GetControllerConfirm())
@@ -674,6 +1665,15 @@ int main(int argc, char* argv[])
 
 			}
 
+			if (state == STATE_SPLASH)
+			{
+				if ((sEvent.type == SDL_KEYDOWN) || (sEvent.type == SDL_MOUSEBUTTONDOWN) || (sEvent.type == SDL_CONTROLLERBUTTONDOWN))
+				{
+					state = STATE_TITLE;
+				}
+				continue;
+			}
+
 			if ((sEvent.type == SDL_KEYDOWN) && (sEvent.key.keysym.sym == SDLK_SPACE ||
 				sEvent.key.keysym.sym == SDLK_RETURN ||
 			   sEvent.key.keysym.sym == SDLK_LCTRL))
@@ -693,6 +1693,12 @@ int main(int argc, char* argv[])
 
 			if (sEvent.type == SDL_KEYDOWN)
 			{
+				if (state == STATE_MENU && GL_IsMenuToggleKey(sEvent.key.keysym.sym))
+				{
+					state = STATE_PLAYING;
+					continue;
+				}
+
 				if (state == STATE_TITLE)
 				{
 					switch (titlescreen.Update(sEvent, levelselect))
@@ -727,7 +1733,33 @@ int main(int argc, char* argv[])
 				}
 				if (state == STATE_MENU)
 				{
-					switch (menuscreen.Update(sEvent))
+					MenuScreen::MenuReturn mr = menuscreen.Update(sEvent);
+
+					if (g_RequestSavePosition)
+					{
+						g_RequestSavePosition = false;
+						SaveSystem::SaveData s;
+						s.levelPath = SaveSystem::GetCurrentLevelPath();
+						s.flatIndex = SaveSystem::GetCurrentFlat();
+						s.camX = cam.x.GetInt();
+						s.camY = cam.y;
+						s.camZ = cam.z.GetInt();
+						s.camRot = cam.rotquick.GetInt();
+
+						// Capture current player state for save/resume
+						MapObject player = logic.GetPlayerObj();
+
+						s.hp        = player.data.ms.hitpoints;
+						s.weapon    = player.data.ms.weapon;
+						s.reload    = player.data.ms.reload;
+						s.reloadcnt = player.data.ms.reloadcnt;
+
+						SaveSystem::SaveToDisk(s);
+						EventReplay::SaveToDisk();
+						SDL_Log("ZGloom SaveSystem: SAVE requested (level=%s, weapon=%d, reload=%d)", s.levelPath.c_str(), s.weapon, s.reload);
+					}
+
+					switch (mr)
 					{
 						case MenuScreen::MENURET_PLAY:
 							state = STATE_PLAYING;
@@ -755,7 +1787,7 @@ int main(int argc, char* argv[])
 							break;
 					}
 				}
-				if ((state == STATE_PLAYING) && (sEvent.key.keysym.sym == SDLK_ESCAPE))
+				if ((state == STATE_PLAYING) && (sEvent.key.keysym.sym == SDLK_ESCAPE || GL_IsMenuToggleKey(sEvent.key.keysym.sym)))
 				{
 					state = STATE_MENU;
 				}
@@ -837,7 +1869,7 @@ int main(int argc, char* argv[])
 			menuscreen.Render(render32, render32, smallfont);
 		}
 		
-		if ((state == STATE_WAITING) || (state == STATE_TITLE))
+		if ((state == STATE_WAITING) || (state == STATE_SPLASH) || (state == STATE_TITLE))
 		{
 			// SDL does not seem to like scaled 8->32 copy?
 			SDL_BlitSurface(render8, NULL, screen32, NULL);
@@ -861,9 +1893,13 @@ int main(int argc, char* argv[])
 				SDL_Surface* tmpBars  = NULL;
 
 				SDL_Surface* bg8 = NULL;
-				if (state == STATE_TITLE)
+				if (state == STATE_SPLASH)
 				{
-					bg8 = titlebitmap;
+					bg8 = splashbitmap;
+				}
+				else if (state == STATE_TITLE)
+				{
+					bg8 = titlescreen.WantsPlainTitleBackground() ? titlebitmap : titlemenubitmap;
 				}
 				else if (state == STATE_WAITING)
 				{
@@ -974,7 +2010,30 @@ int main(int argc, char* argv[])
 			
 			SDL_UpdateTexture(rendertex, NULL, render32->pixels, render32->pitch);
 			SDL_RenderClear(ren);
-			SDL_RenderCopy(ren, rendertex, NULL, NULL);
+
+			// Compute letterboxed destination rect for world texture
+			int outW = 0, outH = 0;
+			if (SDL_GetRendererOutputSize(ren, &outW, &outH) != 0 || outW <= 0 || outH <= 0)
+			{
+				outW = windowwidth;
+				outH = windowheight;
+			}
+
+			float scaleX = outW / (float)renderwidth;
+			float scaleY = outH / (float)renderheight;
+			float scale = (scaleX < scaleY) ? scaleX : scaleY;
+
+			int dstW = (int)(renderwidth * scale + 0.5f);
+			int dstH = (int)(renderheight * scale + 0.5f);
+
+			SDL_Rect dst;
+			dst.w = dstW;
+			dst.h = dstH;
+			dst.x = (outW - dstW) / 2;
+			dst.y = (outH - dstH) / 2;
+
+			SDL_RenderCopy(ren, rendertex, NULL, &dst);
+
 			SDL_UpdateTexture(hudTex, NULL, hudLayer32->pixels, hudLayer32->pitch);
 			RendererHooks::SetHudTexture(hudTex);
 			RendererHooks::endFramePresent();
@@ -993,6 +2052,8 @@ int main(int argc, char* argv[])
 	SDL_FreeSurface(screen32);
 	SDL_FreeSurface(intermissionscreen);
 	SDL_FreeSurface(titlebitmap);
+	SDL_FreeSurface(titlemenubitmap);
+	SDL_FreeSurface(splashbitmap);
 	SDL_DestroyRenderer(ren);
 	SDL_DestroyWindow(win);
 	SDL_Quit();

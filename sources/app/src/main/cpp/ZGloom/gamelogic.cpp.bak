@@ -767,44 +767,6 @@ bool GameLogic::Update(Camera* cam)
 	// Ensure cheats are loaded on first frame
 	EnsureCheatsLoadedGL();
 
-	// --- GOD MODE RUNTIME ENFORCEMENT ---
-	// God mode raises internal health to 32767.  When it is turned off again,
-	// clamp any leftover huge value back to the normal visible max, otherwise
-	// damage is applied but the HUD stays full for thousands of hits.
-	{
-		static bool sPrevGodMode = false;
-		const bool cGodMode = Cheats::GetGodMode();
-
-		if (cGodMode || sPrevGodMode)
-		{
-			for (auto& o : gmap->GetMapObjects())
-			{
-				if (o.t == ObjectGraphics::OLT_PLAYER1)
-				{
-					if (cGodMode)
-					{
-						o.data.ms.hitpoints = 32767;
-						p1health = 32767;
-						playerobj.data.ms.hitpoints = 32767;
-					}
-					else if (o.data.ms.hitpoints > 25)
-					{
-						o.data.ms.hitpoints = 25;
-						p1health = 25;
-						if (playerobj.data.ms.hitpoints > 25)
-						{
-							playerobj.data.ms.hitpoints = 25;
-						}
-					}
-					break;
-				}
-			}
-		}
-
-		sPrevGodMode = cGodMode;
-	}
-	initialhealth = playerobj.data.ms.hitpoints;
-
 	// --- CHEAT RUNTIME ENFORCEMENT (THERMO/INVIS/BOUNCY) ---
 	{
 		static bool sPrevThermo=false, sPrevInvis=false, sPrevBouncy=false;
@@ -1247,7 +1209,7 @@ bool GameLogic::Update(Camera* cam)
 
 	if (squished)
 	{
-		playerobj.data.ms.hitpoints -= Cheats::FilterDamageToPlayer(1);
+		playerobj.data.ms.hitpoints--;
 	}
 
 	if (playerobj.data.ms.mega)

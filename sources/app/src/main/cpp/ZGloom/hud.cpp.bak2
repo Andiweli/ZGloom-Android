@@ -1,0 +1,587 @@
+#include "hud.h"
+#include "font.h"
+#include "config.h"
+#include "objectgraphics.h"
+#include "effects/MuzzleFlashFX.h"
+
+static void TintFontPaletteRed(Font& font)
+{
+	SDL_Palette* src = font.GetPalette();
+	if (!src) return;
+
+	SDL_Surface* palSurface = SDL_CreateRGBSurface(0, 1, 1, 8, 0, 0, 0, 0);
+	if (!palSurface || !palSurface->format || !palSurface->format->palette)
+	{
+		if (palSurface) SDL_FreeSurface(palSurface);
+		return;
+	}
+
+	SDL_Color colors[256];
+	for (int i = 0; i < 256; i++)
+	{
+		colors[i].r = 0;
+		colors[i].g = 0;
+		colors[i].b = 0;
+		colors[i].a = 0xFF;
+	}
+
+	int ncolors = src->ncolors;
+	if (ncolors > 256) ncolors = 256;
+	for (int i = 1; i < ncolors; i++)
+	{
+		Uint8 brightness = src->colors[i].r;
+		if (src->colors[i].g > brightness) brightness = src->colors[i].g;
+		if (src->colors[i].b > brightness) brightness = src->colors[i].b;
+		if (brightness < 0x70) brightness = 0x70;
+
+		colors[i].r = brightness;
+		colors[i].g = 0;
+		colors[i].b = 0;
+		colors[i].a = 0xFF;
+	}
+
+	SDL_SetPaletteColors(palSurface->format->palette, colors, 0, 256);
+	font.SetPal(palSurface);
+	SDL_FreeSurface(palSurface);
+}
+
+static Font* GetHudSmallFont()
+{
+	// The normal game/menu "smallfont" argument can actually be bigfont2.bin
+	// on modern data sets because zgloom.cpp loads bigfont2 into both Font
+	// objects when that file exists.  The HUD must use the real Gloom
+	// smallfont.bin, otherwise HEALTH/WEAPON are rendered too wide.
+	static Font* hudSmallFont = nullptr;
+	static bool attemptedLoad = false;
+	static bool loaded = false;
+
+	if (!attemptedLoad)
+	{
+		attemptedLoad = true;
+		hudSmallFont = new Font();
+
+		CrmFile fontfile;
+		fontfile.Load((Config::GetMiscDir() + "smallfont.bin").c_str());
+		if (fontfile.data)
+		{
+			loaded = hudSmallFont->Load(fontfile);
+			if (loaded)
+			{
+				TintFontPaletteRed(*hudSmallFont);
+			}
+		}
+	}
+
+	return loaded ? hudSmallFont : nullptr;
+}
+
+static void DrawHudText(Font& font, const char* text, int x, int y, SDL_Surface* dest, int scale)
+{
+	if (!text || !dest) return;
+
+	int drawX = x * scale;
+	const int drawY = y * scale;
+	const int advance = 6 * scale;
+
+	for (const char* c = text; *c; ++c)
+	{
+		int glyph = -1;
+		if (*c >= '0' && *c <= '9')
+		{
+			glyph = *c - '0';
+		}
+		else if (*c >= 'A' && *c <= 'Z')
+		{
+			glyph = *c - 'A' + 10;
+		}
+		else if (*c >= 'a' && *c <= 'z')
+		{
+			glyph = *c - 'a' + 10;
+		}
+		else if (*c == '!')
+		{
+			glyph = 36;
+		}
+		else if (*c == '.')
+		{
+			glyph = 37;
+		}
+		else if (*c == ':')
+		{
+			glyph = 38;
+		}
+
+		if (glyph >= 0)
+		{
+			font.Blit(drawX, drawY, glyph, dest, scale);
+		}
+
+		drawX += advance;
+	}
+}
+
+static float g_weapon_tint[5][3] = {
+    {1.0f, 0.97f, 0.94f},
+    {1.0f, 0.97f, 0.94f},
+    {1.0f, 0.97f, 0.94f},
+    {1.0f, 0.97f, 0.94f},
+    {1.0f, 0.97f, 0.94f}
+};
+
+static inline void ComputeWeaponTintsFromIcons(SDL_Surface* icons[5]) {
+    for (int i = 0; i < 5; ++i) {
+        SDL_Surface* s = icons[i];
+        if (!s) continue;
+        uint64_t sumR = 0, sumG = 0, sumB = 0; int count = 0;
+        for (int y = 0; y < s->h; ++y) {
+            uint32_t* row = (uint32_t*)((uint8_t*)s->pixels + y * s->pitch);
+            for (int x = 0; x < s->w; ++x) {
+                uint32_t p = row[x];
+                if ((p & 0xFF000000u) == 0) continue; // skip transparent
+                sumR += (p >> 16) & 0xFFu;
+                sumG += (p >> 8)  & 0xFFu;
+                sumB += (p >> 0)  & 0xFFu;
+                ++count;
+            }
+        }
+        if (count > 0) {
+            float r = (float)sumR / (255.0f * (float)count);
+            float g = (float)sumG / (255.0f * (float)count);
+            float b = (float)sumB / (255.0f * (float)count);
+            float m = r; if (g > m) m = g; if (b > m) m = b; if (m < 1e-4f) m = 1.0f;
+            g_weapon_tint[i][0] = r / m;
+            g_weapon_tint[i][1] = g / m;
+            g_weapon_tint[i][2] = b / m;
+        }
+    }
+}
+
+// Export weapon tint for renderer effects (used by renderer.cpp)
+void Hud_GetWeaponTint(int wepIndex, float& r, float& g, float& b)
+{
+    if (wepIndex < 0) wepIndex = 0;
+    if (wepIndex > 4) wepIndex = 4;
+    r = g_weapon_tint[wepIndex][0];
+    g = g_weapon_tint[wepIndex][1];
+    b = g_weapon_tint[wepIndex][2];
+}
+
+
+#include "gloommaths.h"
+
+// ripped from PPM conversion
+static const uint32_t wepraw[5][81*3] =
+{ 
+	{
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 153, 0, 0, 153, 0, 0,
+		153, 0, 0, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		153, 0, 0, 153, 0, 0, 255, 119, 0, 255, 136, 34, 255, 136, 34,
+		153, 0, 0, 153, 0, 0, 0, 0, 0, 0, 0, 0, 153, 0, 0,
+		255, 136, 34, 238, 238, 102, 238, 238, 102, 238, 238, 102, 255, 136, 34,
+		153, 0, 0, 0, 0, 0, 153, 0, 0, 153, 0, 0, 255, 136, 34,
+		255, 255, 255, 255, 255, 255, 255, 255, 255, 238, 238, 102, 255, 119, 0,
+		153, 0, 0, 153, 0, 0, 255, 136, 34, 255, 255, 255, 255, 255, 255,
+		255, 255, 255, 255, 255, 255, 238, 238, 102, 255, 119, 0, 153, 0, 0,
+		153, 0, 0, 255, 119, 0, 238, 238, 102, 255, 255, 255, 238, 238, 102,
+		255, 255, 255, 255, 136, 34, 153, 0, 0, 153, 0, 0, 153, 0, 0,
+		153, 0, 0, 255, 136, 34, 238, 238, 102, 238, 238, 102, 255, 136, 34,
+		255, 119, 0, 153, 0, 0, 0, 0, 0, 0, 0, 0, 153, 0, 0,
+		153, 0, 0, 153, 0, 0, 255, 136, 34, 153, 0, 0, 153, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 153, 0, 0, 153, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0
+	},
+	{
+		0, 0, 0, 0, 0, 0, 0, 68, 0, 0, 136, 102, 0, 136, 102,
+		0, 136, 102, 0, 68, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 102, 68, 136, 204, 136, 238, 238, 102, 238, 238, 102, 238, 238, 102,
+		136, 204, 136, 0, 102, 68, 0, 0, 0, 0, 68, 0, 136, 204, 136,
+		238, 238, 102, 238, 238, 102, 255, 255, 255, 238, 238, 102, 238, 238, 102,
+		136, 204, 136, 0, 68, 0, 0, 102, 68, 136, 204, 136, 238, 238, 102,
+		255, 255, 255, 255, 255, 255, 255, 255, 255, 238, 238, 102, 238, 238, 102,
+		0, 102, 68, 0, 102, 68, 238, 238, 102, 255, 255, 255, 255, 255, 255,
+		255, 255, 255, 255, 255, 255, 255, 255, 255, 238, 238, 102, 0, 102, 68,
+		0, 102, 68, 238, 238, 102, 238, 238, 102, 255, 255, 255, 255, 255, 255,
+		255, 255, 255, 238, 238, 102, 238, 238, 102, 0, 102, 68, 0, 68, 0,
+		136, 204, 136, 238, 238, 102, 238, 238, 102, 255, 255, 255, 238, 238, 102,
+		238, 238, 102, 136, 204, 136, 0, 68, 0, 0, 0, 0, 0, 102, 68,
+		136, 204, 136, 238, 238, 102, 238, 238, 102, 238, 238, 102, 136, 204, 136,
+		0, 102, 68, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 68, 0,
+		0, 136, 102, 0, 136, 102, 0, 136, 102, 0, 68, 0, 0, 0, 0,
+		0, 0, 0
+	},
+	{
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 68, 0, 0, 68, 0,
+		0, 68, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 136, 102, 136, 204, 136, 221, 204, 255, 136, 204, 136,
+		0, 102, 68, 0, 0, 0, 0, 0, 0, 0, 0, 0, 136, 204, 136,
+		255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+		0, 102, 68, 0, 0, 0, 0, 68, 0, 221, 204, 255, 255, 255, 255,
+		255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 136, 204, 136,
+		0, 0, 0, 0, 68, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+		255, 255, 255, 255, 255, 255, 255, 255, 255, 136, 204, 136, 0, 68, 0,
+		0, 0, 0, 221, 204, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+		255, 255, 255, 255, 255, 255, 136, 204, 136, 0, 68, 0, 0, 0, 0,
+		0, 136, 102, 238, 238, 102, 238, 238, 102, 255, 255, 255, 255, 255, 255,
+		255, 255, 255, 0, 68, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 136, 102, 136, 204, 136, 221, 204, 255, 136, 204, 136, 0, 102, 68,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 68, 0, 0, 68, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0
+	},
+	{
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 102, 68,
+		0, 102, 68, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 136, 119, 238, 136, 204, 136, 136, 119, 238,
+		85, 0, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		136, 119, 238, 221, 204, 255, 255, 255, 255, 255, 255, 255, 221, 204, 255,
+		85, 0, 153, 0, 0, 0, 0, 0, 0, 85, 51, 204, 221, 204, 255,
+		255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 221, 204, 255,
+		0, 102, 68, 0, 68, 0, 136, 119, 238, 221, 204, 255, 255, 255, 255,
+		255, 255, 255, 255, 255, 255, 255, 255, 255, 221, 204, 255, 85, 0, 153,
+		0, 102, 68, 136, 119, 238, 221, 204, 255, 221, 204, 255, 255, 255, 255,
+		255, 255, 255, 255, 255, 255, 221, 204, 255, 85, 0, 153, 0, 68, 0,
+		136, 204, 136, 238, 238, 102, 255, 255, 255, 255, 255, 255, 221, 204, 255,
+		221, 204, 255, 136, 119, 238, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		85, 0, 153, 136, 119, 238, 221, 204, 255, 221, 204, 255, 136, 119, 238,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 68, 0, 0, 102, 68, 0, 102, 68, 0, 0, 0,
+		0, 0, 0
+	},
+	{
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 85, 0, 153,
+		85, 0, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 85, 0, 153, 136, 119, 238, 221, 204, 255, 136, 119, 238,
+		85, 17, 187, 0, 0, 0, 0, 0, 0, 0, 0, 0, 85, 51, 204,
+		221, 204, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 221, 204, 255,
+		85, 0, 153, 0, 0, 0, 0, 0, 0, 85, 51, 204, 255, 255, 255,
+		255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 136, 119, 238,
+		0, 0, 0, 0, 0, 0, 221, 204, 255, 255, 255, 255, 255, 255, 255,
+		255, 255, 255, 255, 255, 255, 255, 255, 255, 221, 204, 255, 85, 0, 153,
+		0, 0, 0, 136, 119, 238, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+		255, 255, 255, 255, 255, 255, 136, 119, 238, 0, 0, 0, 0, 0, 0,
+		85, 51, 204, 221, 204, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+		221, 204, 255, 85, 0, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		136, 119, 238, 221, 204, 255, 255, 255, 255, 221, 204, 255, 85, 51, 204,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		85, 0, 153, 85, 51, 204, 85, 0, 153, 0, 0, 0, 0, 0, 0,
+		0, 0, 0
+	}
+};
+
+Hud::Hud()
+{
+	healthbar = SDL_CreateRGBSurface(0, 2 + 25 * 2, 8, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
+	healthbaron = SDL_CreateRGBSurface(0, 2 + 25 * 2, 8, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
+	weaponbar = SDL_CreateRGBSurface(0, 2 + 25 * 2, 9, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
+
+	for (int x = 0; x < (25 * 2 + 2); x++)
+	{
+		for (int y = 0; y < 8; y++)
+		{
+			uint32_t* pix = (uint32_t*)(healthbar->pixels) + x + y*(healthbar->pitch / 4);
+			uint32_t* hpix = (uint32_t*)(healthbaron->pixels) + x + y*(healthbar->pitch / 4);
+			uint32_t* wpix = (uint32_t*)(weaponbar->pixels) + x + y*(weaponbar->pitch / 4);
+
+			// Original-style top HUD: no inactive healthbar background.
+			// Draw only active health units, but keep the old small per-unit
+			// subdivision by using a darker left pixel and a brighter right pixel
+			// for each 2-pixel health cell.  This avoids the previous solid
+			// three-colour bar while keeping the background transparent.
+			*pix = 0;
+			*hpix = 0;
+			*wpix = 0;
+
+			if (x < 25 * 2)
+			{
+				const int healthUnit = x / 2;
+				const bool brightHalf = (x & 1) != 0;
+				const bool edgeRow = (y == 0) || (y == 7);
+
+				if (healthUnit >= 18)
+				{
+					// rightmost 7 units: green
+					*hpix = edgeRow ? (brightHalf ? 0xff009900 : 0xff006600)
+					                 : (brightHalf ? 0xff00cc00 : 0xff008800);
+				}
+				else if (healthUnit >= 11)
+				{
+					// middle 7 units: orange, not bright yellow
+					*hpix = edgeRow ? (brightHalf ? 0xffbb5500 : 0xff884000)
+					                 : (brightHalf ? 0xffdd6600 : 0xffaa4400);
+				}
+				else
+				{
+					// remaining left units: red
+					*hpix = edgeRow ? (brightHalf ? 0xffbb0000 : 0xff880000)
+					                 : (brightHalf ? 0xffff0000 : 0xffbb0000);
+				}
+			}
+		}
+	}
+
+	for (int i = 0; i < 5; i++)
+	{
+		weaponsprites[i] = SDL_CreateRGBSurface(0, 9, 9, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
+
+		for (int y = 0; y < 9; y++)
+		{
+			for (int x = 0; x < 9; x++)
+			{
+				uint32_t pix = 0xFF000000;
+
+				pix |= wepraw[i][3 * (x + y * 9) + 0] << 16;
+				pix |= wepraw[i][3 * (x + y * 9) + 1] << 8;
+				pix |= wepraw[i][3 * (x + y * 9) + 2] << 0;
+				if (pix == 0xFF000000) pix = 0;
+
+				*((uint32_t*)(weaponsprites[i]->pixels) + x + y*weaponsprites[i]->pitch / 4) = pix;
+			}
+		}
+	}
+
+	ComputeWeaponTintsFromIcons(weaponsprites);
+
+
+	messages.push_back("dummy");
+	messages.push_back("health bonus!");
+	messages.push_back("weapon boosted to full!");
+	messages.push_back("weapon boost!");
+	messages.push_back("ultra mega overkill!!!");
+	messages.push_back("mega weapon boost!");
+	messages.push_back("new weapon!");
+	messages.push_back("invisibility!");
+	messages.push_back("hyper!");
+	messages.push_back("bouncy bullets!");
+	messages.push_back("got the thermo glasses!");
+	messages.push_back("mega weapon out...'");
+	messages.push_back("thermo glasses out...");
+	messages.push_back("invisibility out...");
+	messages.push_back("hyper out...");
+
+	CrmFile gundata;
+
+	ObjectGraphics::LoadGraphic((Config::GetMiscDir() + "gun.bin").c_str(), gunshapes);
+
+#if 0
+	for (size_t i = 0; i < gunshapes.size(); i++)
+	{
+		std::string name = "gunshapes";
+
+		gunshapes[i].DumpDebug((name + std::to_string(i) + ".ppm").c_str());
+	}
+#endif
+
+	gunsurfaces.resize(gunshapes.size());
+	gunsurfacesblend.resize(gunshapes.size());
+
+	for (size_t i = 0; i < gunshapes.size(); i++)
+	{
+		// Do I need to worry about endianness here?
+		std::vector<uint32_t> tempdata;
+
+		// get alpha right
+		tempdata = gunshapes[i].data;
+
+		for (auto &i : tempdata)
+		{
+			if (i == 1)
+			{
+				i = 0;
+			}
+			else
+			{
+				i |= 0xFF000000;
+			}
+		}
+
+		gunsurfaces[i] = SDL_CreateRGBSurface(0, gunshapes[i].w, gunshapes[i].h, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
+		gunsurfacesblend[i] = SDL_CreateRGBSurface(0, gunshapes[i].w, gunshapes[i].h, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
+
+		for (uint32_t y = 0; y < gunshapes[i].h; y++)
+		{
+			for (uint32_t x = 0; x < gunshapes[i].w; x++)
+			{
+				((uint32_t*)gunsurfaces[i]->pixels)[x + gunsurfaces[i]->pitch / 4 * y] = tempdata[y + x*gunshapes[i].h];
+				((uint32_t*)gunsurfacesblend[i]->pixels)[x + gunsurfaces[i]->pitch / 4 * y] = tempdata[y + x*gunshapes[i].h]?0xFF808080:0xFFFFFFFF;
+			}
+		}
+	}
+}
+
+Hud::~Hud() {
+	SDL_FreeSurface(healthbar);
+	SDL_FreeSurface(healthbaron);
+	SDL_FreeSurface(weaponbar);
+	for (int i = 0; i < 5; i++) {
+		SDL_FreeSurface(weaponsprites[i]);
+	}
+}
+
+void Hud::Render(SDL_Surface* surface, MapObject& player, Font& font)
+{
+	SDL_Rect dstrect;
+	SDL_Rect srcrect;
+
+	int scale = surface->h / 256;
+
+	if (scale < 1) scale = 1;
+
+	// Original-style top-left HUD layout.  Use the real smallfont.bin for
+	// HEALTH/WEAPON, not the bigfont2-backed menu font.
+	Font* hudSmallFont = GetHudSmallFont();
+	Font& hudTextFont = hudSmallFont ? *hudSmallFont : font;
+	DrawHudText(hudTextFont, "HEALTH", 2, 4, surface, scale);
+	DrawHudText(hudTextFont, "WEAPON", 2, 15, surface, scale);
+
+	int hitpoints = player.data.ms.hitpoints;
+	if (hitpoints < 0) hitpoints = 0;
+	if (hitpoints > 25) hitpoints = 25;
+
+	dstrect.x = 44 * scale;
+	dstrect.y = 4 * scale;
+	dstrect.w = (25 * 2 + 2) * scale;
+	dstrect.h = 8 * scale;
+
+	srcrect.x = 0;
+	srcrect.y = 0;
+	srcrect.w = 25 * 2 + 2;
+	srcrect.h = 8;
+
+	// No inactive healthbar background: draw only the active health units.
+	srcrect.w = hitpoints * 2;
+	dstrect.w = srcrect.w * scale;
+	if (srcrect.w > 0)
+	{
+		SDL_BlitScaled(healthbaron, &srcrect, surface, &dstrect);
+	}
+
+	int weapon = player.data.ms.weapon;
+	if (weapon < 0) weapon = 0;
+	if (weapon > 4) weapon = 4;
+
+	int weaponIcons = 6 - player.data.ms.reload;
+	if (weaponIcons < 0) weaponIcons = 0;
+	if (weaponIcons > 6) weaponIcons = 6;
+
+	for (int i = 0; i < weaponIcons; i++)
+	{
+		dstrect.x = (44 + 10 * i) * scale;
+		dstrect.y = 14 * scale;
+		dstrect.w = weaponsprites[weapon]->w * scale;
+		dstrect.h = weaponsprites[weapon]->h * scale;
+
+		SDL_BlitScaled(weaponsprites[weapon], NULL, surface, &dstrect);
+	}
+
+	if (player.data.ms.messtimer < 0)
+	{
+		font.PrintMessage(messages[player.data.ms.mess], 40, surface, scale);
+	}
+
+	//GUN. This is largely guesswork, it's not in the available gloom deluxe source as far as I can tell. There's not even a reference to gun.bin
+
+	if (gunshapes.size())
+	{
+		dstrect.x = surface->w / 2 - gunshapes[0].xh * scale;
+		dstrect.y = surface->h - gunshapes[0].h*scale;
+		dstrect.w = gunshapes[0].w*scale;
+		dstrect.h = gunshapes[0].h*scale;
+
+		if (player.data.ms.fired)
+		{
+			SDL_Rect bullrect;
+
+			// G3 does not have fire anims?
+			if (gunshapes.size() > 2)
+			{
+				int wepshape = 2 + (player.data.ms.weapon + 1) / 2;
+				bullrect.x = (surface->w - gunshapes[wepshape].w*scale) / 2;
+				bullrect.y = surface->h - gunshapes[wepshape].h*scale;
+				bullrect.w = gunshapes[wepshape].w*scale;
+				bullrect.h = gunshapes[wepshape].h*scale;
+
+				int zoom = GloomMaths::RndW() & 3;
+
+				bullrect.x -= zoom*scale;
+				bullrect.y -= zoom*scale;
+				bullrect.w += 2*zoom*scale;
+				bullrect.h += 2*zoom*scale;
+
+				SDL_BlitScaled(gunsurfaces[wepshape], NULL, surface, &bullrect);
+			}
+
+
+			dstrect.y += 10 * scale;
+		}
+		else if (player.data.ms.bounce)
+		{
+			int16_t camrots[4];
+			uint8_t ang = (player.data.ms.bounce>>1) * 0xff;
+
+			GloomMaths::GetCamRotRaw(ang, camrots);
+
+			int32_t xoffset = camrots[1];
+
+			xoffset <<= 5;
+
+			xoffset >>= 16;
+
+			dstrect.x += xoffset*scale;
+
+			int32_t yoffset = xoffset/2;
+
+			if (yoffset < 0) yoffset = -yoffset;
+
+			dstrect.y -= yoffset*scale;
+		}
+
+		dstrect.y += 25 * scale;
+
+		if (player.data.ms.invisible)
+		{
+			SDL_SetSurfaceBlendMode(gunsurfacesblend[player.data.ms.fired ? 1 : 0], SDL_BLENDMODE_MOD);
+			SDL_BlitScaled(gunsurfacesblend[player.data.ms.fired ? 1 : 0], NULL, surface, &dstrect);
+		}
+		else
+		{
+			SDL_BlitScaled(gunsurfaces[player.data.ms.fired ? 1 : 0], NULL, surface, &dstrect);
+		}
+	}
+
+	
+	// --- Muzzle Flash (PC port from Vita 7.19): simple additive flash on fire ---
+	static uint8_t s_mz_prev = 0;
+	uint8_t __mz_cur = (uint8_t)player.data.ms.fired;
+	if (__mz_cur > 0) {
+		if (s_mz_prev == 0 || __mz_cur > s_mz_prev) {
+			int __wep = player.data.ms.weapon; if (__wep < 0) __wep = 0; if (__wep > 4) __wep = 4;
+			float __scale = 1.0f + 0.2f * (float)(__wep);
+			MuzzleFlashFX::Get().SetScale(__scale);
+			// Slightly warm off-white tint (match Vita default)
+			MuzzleFlashFX::Get().SetTint(g_weapon_tint[__wep][0], g_weapon_tint[__wep][1], g_weapon_tint[__wep][2]);
+			MuzzleFlashFX::Get().Trigger(1.0f, 1.0f);
+		}
+	} else {
+		if (s_mz_prev > 0) { MuzzleFlashFX::Get().Disarm(); }
+	}
+	s_mz_prev = __mz_cur;
+	// --- end muzzle flash port ---
+
+	if (Config::GetDebug())
+	{
+		std::string pos = "position ";
+		std::string fps = "FPS ";
+
+		pos += std::to_string(player.x.GetInt());
+		pos += ' ';
+		pos += std::to_string(player.z.GetInt());
+		pos += ' ';
+		pos += std::to_string(player.data.ms.rotquick.GetInt());
+
+		fps += std::to_string(Config::GetFPS());
+
+		font.PrintMessage(pos, 0, surface, 1);
+		font.PrintMessage(fps,10, surface, 1);
+	}
+}
