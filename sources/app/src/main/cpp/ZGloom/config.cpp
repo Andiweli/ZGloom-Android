@@ -37,7 +37,7 @@ namespace Config
 	static int32_t focallength;
 	static int mousesens;
 	static bool autofire;
-	static int bloodsize;
+	static int bloodmode;
 	static bool debug = false;
 	static uint32_t FPS;
 	static bool multithread = true;
@@ -356,7 +356,7 @@ namespace Config
 
 		displayaspect = 1; // default 16:9 widescreen (4:3 is original)
 
-		bloodsize = 2;
+		bloodmode = 1; // SPLATTER: the old recommended BLOOD SIZE 2 behaviour
 
 		multithread = true;
 		debug = false;
@@ -395,6 +395,7 @@ namespace Config
 		std::ifstream file;
 
 		bool firstRunDefaults = false;
+		bool sawBloodMode = false;
 
 		file.open(MakePath("config.txt").c_str());
 
@@ -441,9 +442,20 @@ if (command == "displayaspect")
 					{
 						mousesens = std::stoi(line);
 					}
-					if (command == "bloodsize")
+					if (command == "bloodmode" || command == "blood")
 					{
-						bloodsize = std::stoi(line);
+						bloodmode = std::stoi(line);
+						if (bloodmode < 0) bloodmode = 0;
+						if (bloodmode > 2) bloodmode = 2;
+						sawBloodMode = true;
+					}
+					if (command == "bloodsize" && !sawBloodMode)
+					{
+						// Legacy migration: the former zero value means OFF; every
+						// visible size maps to the stable SPLATTER preset.  MASSACRE
+						// is never enabled merely by upgrading an old installation.
+						const int legacySize = std::stoi(line);
+						bloodmode = legacySize <= 0 ? 0 : 1;
 					}
 					if (command == "sfxvol")
 					{
@@ -470,6 +482,7 @@ if (command == "displayaspect")
 					if (command == "scanlines")        { Config::SetScanlines(std::stoi(line)); }
 					if (command == "linesintensity")   { Config::SetScanlineIntensity(std::stoi(line)); }
 					if (command == "muzzleflash")      { SetMuzzleFlash(std::stoi(line)); }
+					if (command == "reflections")      { SetReflections(std::stoi(line)); }
 if (command == "multithread")
 					{
 						multithread = std::stoi(line)!=0;
@@ -525,6 +538,7 @@ if (command == "autofire")
 		{
 			Cheats::SetStartWeapon(5);
 			SetMuzzleFlash(0);
+			SetReflections(0);
 			SetBlobShadows(0);
 		}
 	}
@@ -549,14 +563,36 @@ if (command == "autofire")
 		mousesens = sens;
 	}
 
-	int GetBlood()
+	int GetBloodMode()
 	{
-		return bloodsize;
+		return bloodmode;
 	}
 
-	void SetBlood(int b)
+	void SetBloodMode(int mode)
 	{
-		bloodsize = b;
+		if (mode < 0) mode = 0;
+		if (mode > 2) mode = 2;
+		bloodmode = mode;
+	}
+
+	int GetBloodParticleSize()
+	{
+		return bloodmode == 0 ? 0 : 2;
+	}
+
+	bool BloodPoolsEnabled()
+	{
+		return bloodmode == 2;
+	}
+
+	int GetBlood()
+	{
+		return GetBloodParticleSize();
+	}
+
+	void SetBlood(int legacySize)
+	{
+		bloodmode = legacySize <= 0 ? 0 : 1;
 	}
 
 	
@@ -712,6 +748,14 @@ int GetMT()
 	{
 		return SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_UP)!=0;
 	}
+	bool GetControllerLeft()
+	{
+		return SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_LEFT)!=0;
+	}
+	bool GetControllerRight()
+	{
+		return SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)!=0;
+	}
 	bool GetControllerStart()
 	{
 		// START or GUIDE, plus Y on OUYA (top face button) -> Pause / Menu
@@ -793,11 +837,14 @@ file << ";ZGloom Configuration\n\n";
 		file << ";Multithreaded renderer (somewhat experimental)\n";
 		file << "multithread " << (multithread ? 1 : 0) << "\n\n";
 
-		file << ";Size of blood splatters in pixels\n";
-		file << "bloodsize " << bloodsize << "\n\n";
+		file << ";Blood: 0=OFF, 1=SPLATTER, 2=MASSACRE\n";
+		file << "bloodmode " << bloodmode << "\n\n";
 
-		file << ";Muzzle Flash and Weapon/Upgrade reflections\n";
+		file << ";Muzzle flash\n";
 		file << "muzzleflash " << Config::GetMuzzleFlash() << "\n\n";
+
+		file << ";Reflections: 0=OFF, 1=OBJECTS, 2=ALL\n";
+		file << "reflections " << Config::GetReflections() << "\n\n";
 
 		file << ";blob shadows enabled?\n";
 		file << "blobshadows " << GetBlobShadows() << "\n\n";

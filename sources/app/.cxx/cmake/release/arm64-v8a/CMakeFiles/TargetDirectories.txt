@@ -1,3 +1,0 @@
-E:/Development/Android/ZGloom/ZGloom-Android/app/.cxx/cmake/release/arm64-v8a/CMakeFiles/edit_cache.dir
-E:/Development/Android/ZGloom/ZGloom-Android/app/.cxx/cmake/release/arm64-v8a/CMakeFiles/main.dir
-E:/Development/Android/ZGloom/ZGloom-Android/app/.cxx/cmake/release/arm64-v8a/CMakeFiles/rebuild_cache.dir

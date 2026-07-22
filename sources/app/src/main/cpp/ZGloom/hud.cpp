@@ -382,7 +382,7 @@ static SDL_Surface* HudCreateGlyphSurface(int w, int h)
 
 static bool HudLoadCrmSmallFont(CrmFile& fontfile, HudSmallFontCache& out)
 {
-	if (!fontfile.data || fontfile.size < 4 + 40 * 4)
+	if (!fontfile.data || fontfile.size < 4 + 50 * 4)
 	{
 		return false;
 	}
@@ -399,7 +399,7 @@ static bool HudLoadCrmSmallFont(CrmFile& fontfile, HudSmallFontCache& out)
 	// 7-bitplane glyph layout as Font::Load(), but Font::Load() does not
 	// create 32-bit scaled glyphs.  Decode straight to ARGB here so Android
 	// scaled blits are safe and the HUD never falls back to bigfont2.
-	for (int i = 0; i < 40; ++i)
+	for (int i = 0; i < 50; ++i)
 	{
 		const uint32_t pos = HudGet32(data + 4 + 4 * i);
 		if (pos + 8 >= size)
@@ -473,14 +473,14 @@ static bool HudLoadRawShapeSmallFont(CrmFile& fontfile, HudSmallFontCache& out)
 	}
 	const uint32_t frames = static_cast<uint32_t>(HudGet16(data + 2)) << shift;
 	const uint32_t paletteOffset = HudGet32(data + 8);
-	if (frames < 40 || frames > 256 || paletteOffset >= size || 12 + frames * 4 > size)
+	if (frames < 50 || frames > 256 || paletteOffset >= size || 12 + frames * 4 > size)
 	{
 		return false;
 	}
 
 	// Zombie Massacre's stuf/smallfont.bin is an unpacked Shape/Graphic file,
 	// not the CrM2 font layout.  Load the glyph shapes directly and tint them red.
-	for (uint32_t i = 0; i < 40; ++i)
+	for (uint32_t i = 0; i < 50; ++i)
 	{
 		const uint32_t off = HudGet32(data + 12 + i * 4);
 		if (off + 8 >= size)
@@ -588,6 +588,21 @@ static void DrawHudText(const char* text, int x, int y, SDL_Surface* dest, int s
 
 		drawX += advance;
 	}
+}
+
+static void DrawHudGlyph(int glyphIndex, int x, int y, SDL_Surface* dest, int scale)
+{
+	if (!dest || scale < 1) return;
+	HudSmallFontCache& font = GetHudSmallFont();
+	if (!font.loaded || glyphIndex < 0 || glyphIndex >= 50 || !font.glyphs[glyphIndex])
+		return;
+
+	SDL_Rect dstrect;
+	dstrect.x = x * scale;
+	dstrect.y = y * scale;
+	dstrect.w = font.glyphs[glyphIndex]->w * scale;
+	dstrect.h = font.glyphs[glyphIndex]->h * scale;
+	SDL_BlitScaled(font.glyphs[glyphIndex], nullptr, dest, &dstrect);
 }
 
 static float g_weapon_tint[5][3] = {
@@ -888,7 +903,7 @@ Hud::~Hud() {
 	}
 }
 
-void Hud::Render(SDL_Surface* surface, MapObject& player, Font& font)
+void Hud::Render(SDL_Surface* surface, MapObject& player, Font& font, int lives)
 {
 	SDL_Rect dstrect;
 	SDL_Rect srcrect;
@@ -902,6 +917,18 @@ void Hud::Render(SDL_Surface* surface, MapObject& player, Font& font)
 	// differences and never falls back to bigfont2.
 	DrawHudText("HEALTH", 2, 4, surface, scale);
 	DrawHudText("WEAPON", 2, 15, surface, scale);
+
+	// GloomReforged-compatible life reserve at the top-right.  The embedded
+	// smallfont contains the original red life/heart at zero-based slot 43
+	// (the assembler calls it shape 44).  Anchor against the logical render
+	// width so placement remains correct in both 320x256 and 455x256 modes.
+	const int logicalWidth = surface->w / scale;
+	DrawHudText("LIVES", logicalWidth - 84, 4, surface, scale);
+	lives = std::max(0, std::min(5, lives));
+	for (int i = 0; i < lives; ++i)
+	{
+		DrawHudGlyph(43, logicalWidth - 44 + i * 8, 4, surface, scale);
+	}
 
 	int hitpoints = player.data.ms.hitpoints;
 	if (hitpoints < 0) hitpoints = 0;

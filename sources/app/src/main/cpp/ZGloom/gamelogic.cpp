@@ -4,11 +4,583 @@
 #include "soundhandler.h"
 #include "hud.h"
 #include "config.h"
+#include "SaveSystem.h"
 #include <cctype>
 #include <algorithm>
 #include <sstream>
 #include <fstream>
 #include "cheats/CheatSystem.h"
+
+// Defender minigame implementation lives in this always-compiled translation
+// unit.  Some older Android CMake/Gradle native models keep a fixed source
+// list and ignore newly added .cpp files even after reconfiguration.  Keeping
+// these definitions here makes the portable minigame independent of source
+// glob/cache behaviour on Android, while DefenderGame.cpp remains a harmless
+// compatibility stub for projects that already list it explicitly.
+
+const DefenderGame::ShapeDef DefenderGame::kShapes[14] =
+{
+    {65, 36,  6,  3}, // 0 player right
+    {65, 40,  6,  3}, // 1 player left
+    {66, 44,  3,  1}, // 2 bullet right
+    {66, 46,  3,  1}, // 3 bullet left
+    {72, 37,  5,  5}, // 4 lander
+    {84, 37,  1,  1}, // 5 fragment
+    {86, 39,  1,  1}, // 6 fragment
+    {81, 39,  1,  1}, // 7 player fragment
+    {79, 37,  1,  1}, // 8 player fragment
+    {71, 44,  2,  1}, // 9 life marker
+    {65, 49, 15, 12}, // 10 game over
+    {86, 49, 11, 10}, // 11 win
+    {79, 42,  2,  5}, // 12 scanner left
+    {85, 42,  2,  5}  // 13 scanner right
+};
+
+DefenderGame::DefenderGame()
+{
+    objects.reserve(kMaxObjects);
+}
+
+bool DefenderGame::Begin(std::vector<Column>* textureColumns, std::size_t textureBaseColumn, int episodeNumber)
+{
+    Reset();
+
+    columns = textureColumns;
+    baseColumn = textureBaseColumn;
+    episode = std::max(1, std::min(3, episodeNumber));
+
+    if (!ValidateTexture())
+    {
+        Reset();
+        return false;
+    }
+
+    static const int targetTable[3] = {20, 35, 50};
+    static const int delayTable[3] = {25, 20, 15};
+    targetTotal = targetTable[episode - 1];
+    targetsRemaining = targetTotal;
+    landerDelay = delayTable[episode - 1];
+    playerLives = 3;
+    active = true;
+
+    InitialiseRound();
+    DrawFrame();
+    return true;
+}
+
+void DefenderGame::Reset()
+{
+    columns = nullptr;
+    baseColumn = 0;
+    objects.clear();
+    active = false;
+    complete = false;
+    won = false;
+    fireHeld = false;
+    playerDead = false;
+    resultStarted = false;
+    episode = 1;
+    targetTotal = 20;
+    targetsToSpawn = 20;
+    targetsRemaining = 20;
+    landerDelay = 25;
+    landerCounter = 1;
+    playerLives = 3;
+    playerShape = 0;
+    deadCounter = 0;
+    resultCounter = 0;
+    playerX = 0;
+    playerY = 18 << 16;
+    playerVX = 0;
+}
+
+bool DefenderGame::ValidateTexture() const
+{
+    // Visible monitor: base + 0..63. Defender artwork: base + 64..127.
+    return columns && columns->size() >= baseColumn + 128;
+}
+
+void DefenderGame::InitialiseRound()
+{
+    objects.clear();
+    targetsToSpawn = targetsRemaining;
+    landerCounter = landerDelay;
+    playerX = 0;
+    playerY = 18 << 16;
+    playerVX = 0;
+    playerShape = 0;
+    playerDead = false;
+    deadCounter = 0;
+    fireHeld = false;
+}
+
+void DefenderGame::Update(const InputState& input)
+{
+    if (!active || complete || !ValidateTexture())
+        return;
+
+    if (resultStarted)
+    {
+        // The original keeps drawing/updating residual explosion fragments
+        // during the short WIN/GAME OVER hold, while normal play is locked.
+        UpdateObjects();
+        RemoveDeadObjects();
+        if (resultCounter > 0)
+            --resultCounter;
+        if (resultCounter <= 0)
+        {
+            complete = true;
+            active = false;
+        }
+        DrawFrame();
+        return;
+    }
+
+    if (targetsToSpawn > 0)
+    {
+        --landerCounter;
+        if (landerCounter <= 0)
+        {
+            SpawnLander();
+            landerCounter = landerDelay;
+        }
+    }
+
+    if (!playerDead)
+        UpdatePlayer(input);
+    else
+    {
+        ++deadCounter;
+        if (deadCounter >= 96)
+        {
+            if (playerLives > 0)
+                InitialiseRound();
+            else
+                StartResult(false);
+        }
+    }
+
+    UpdateObjects();
+    ResolveCollisions();
+    RemoveDeadObjects();
+
+    if (targetsRemaining <= 0)
+        StartResult(true);
+    else if (playerLives <= 0 && playerDead && deadCounter >= 96)
+        StartResult(false);
+
+    DrawFrame();
+}
+
+void DefenderGame::StartResult(bool playerWon)
+{
+    if (resultStarted)
+        return;
+
+    won = playerWon;
+    resultStarted = true;
+    resultCounter = 96;
+    fireHeld = false;
+}
+
+void DefenderGame::UpdatePlayer(const InputState& input)
+{
+    if (input.moveX < 0)
+    {
+        playerShape = 1;
+        playerVX -= 0x8000;
+        if (playerVX >= 0)
+            playerVX -= 0x4000;
+        if (playerVX < -0x30000)
+            playerVX = -0x30000;
+    }
+    else if (input.moveX > 0)
+    {
+        playerShape = 0;
+        playerVX += 0x8000;
+        if (playerVX <= 0)
+            playerVX += 0x4000;
+        if (playerVX > 0x30000)
+            playerVX = 0x30000;
+    }
+    else if (playerVX < 0)
+    {
+        playerVX += 0x1000;
+        if (playerVX > 0)
+            playerVX = 0;
+    }
+    else if (playerVX > 0)
+    {
+        playerVX -= 0x1000;
+        if (playerVX < 0)
+            playerVX = 0;
+    }
+
+    playerX = WrapWorldX(playerX + playerVX);
+
+    playerY += input.moveY * 0x10000;
+    if (playerY < (1 << 16))
+        playerY = 1 << 16;
+    if (playerY > (34 << 16))
+        playerY = 34 << 16;
+
+    if (input.fire)
+    {
+        if (!fireHeld)
+        {
+            fireHeld = true;
+            SpawnBullet();
+        }
+    }
+    else
+    {
+        fireHeld = false;
+    }
+}
+
+void DefenderGame::SpawnBullet()
+{
+    if (objects.size() >= kMaxObjects)
+        return;
+
+    DefObject bullet;
+    bullet.type = ObjectType::Bullet;
+    bullet.x = playerX;
+    bullet.y = playerY + (1 << 16);
+    bullet.vx = (playerShape == 0 ? 0x20000 : -0x20000) + playerVX;
+    bullet.vy = 0;
+    bullet.shape = playerShape + 2;
+    bullet.delay = 12;
+    bullet.collidable = true;
+    objects.push_back(bullet);
+    SoundHandler::Play(SoundHandler::SOUND_SHOOT3);
+}
+
+void DefenderGame::SpawnLander()
+{
+    if (targetsToSpawn <= 0 || objects.size() >= kMaxObjects)
+        return;
+
+    --targetsToSpawn;
+
+    DefObject lander;
+    lander.type = ObjectType::Lander;
+    lander.x = static_cast<int32_t>(GloomMaths::RndW() & 255) << 16;
+    lander.y = static_cast<int32_t>(GloomMaths::RndN(32)) << 16;
+    lander.shape = 5;
+    lander.delay = 32;
+    lander.collidable = false;
+    objects.push_back(lander);
+
+    // The original creates a brief cloud of pixels around every incoming lander.
+    SpawnFragments(lander.x, lander.y, 8, 5, false);
+}
+
+void DefenderGame::SpawnFragments(int32_t x, int32_t y, int count, int firstShape, bool gravity)
+{
+    for (int i = 0; i < count && objects.size() < kMaxObjects; ++i)
+    {
+        DefObject fragment;
+        fragment.type = gravity ? ObjectType::Fragment : ObjectType::ImpactFragment;
+        fragment.vx = RandomSigned16() * 2;
+        fragment.vy = RandomSigned16() * 2;
+        fragment.x = WrapWorldX(x - (fragment.vx * 32));
+        fragment.y = y - (fragment.vy * 32);
+        fragment.shape = firstShape + (i & 1);
+        fragment.delay = gravity ? 15 : 32;
+        fragment.collidable = false;
+        objects.push_back(fragment);
+    }
+}
+
+void DefenderGame::DestroyLander(std::size_t index)
+{
+    if (index >= objects.size() || objects[index].remove)
+        return;
+
+    const int32_t x = objects[index].x;
+    const int32_t y = objects[index].y;
+    objects[index].remove = true;
+    --targetsRemaining;
+    SoundHandler::Play(SoundHandler::SOUND_DIE);
+    SpawnFragments(x, y, 8, 5, true);
+}
+
+void DefenderGame::DestroyPlayer()
+{
+    if (playerDead)
+        return;
+
+    playerDead = true;
+    deadCounter = 0;
+    --playerLives;
+    SoundHandler::Play(SoundHandler::SOUND_ROBODIE);
+    SpawnFragments(playerX, playerY, 32, 7, true);
+}
+
+void DefenderGame::UpdateObjects()
+{
+    for (DefObject& object : objects)
+    {
+        if (object.remove)
+            continue;
+
+        switch (object.type)
+        {
+            case ObjectType::Bullet:
+                --object.delay;
+                if (object.delay <= 0)
+                {
+                    object.remove = true;
+                    break;
+                }
+                object.x = WrapWorldX(object.x + object.vx);
+                break;
+
+            case ObjectType::ImpactFragment:
+                --object.delay;
+                if (object.delay <= 0)
+                {
+                    object.remove = true;
+                    break;
+                }
+                object.x = WrapWorldX(object.x + object.vx);
+                object.y += object.vy;
+                break;
+
+            case ObjectType::Fragment:
+                object.vy += 0x1000;
+                object.y += object.vy;
+                if ((object.y >> 16) >= kScreenHeight)
+                {
+                    object.remove = true;
+                    break;
+                }
+                object.x = WrapWorldX(object.x + object.vx);
+                break;
+
+            case ObjectType::Lander:
+                // In the Amiga routine landers stop immediately while the
+                // player explosion/death countdown is active.
+                if (playerDead)
+                    break;
+
+                if (object.delay > 0)
+                {
+                    --object.delay;
+                    if (object.delay <= 0)
+                    {
+                        object.shape = 4;
+                        object.collidable = true;
+                    }
+                    break;
+                }
+
+                if (!playerDead)
+                {
+                    const int landerX = object.x >> 16;
+                    const int targetX = playerX >> 16;
+                    const int dx = WrappedDelta(landerX, targetX);
+                    if (dx < 0)
+                        object.vx += 0x4000;
+                    else if (dx > 0)
+                        object.vx -= 0x4000;
+                    object.vx = std::max(-0x10000, std::min(0x10000, object.vx));
+
+                    const int landerY = object.y >> 16;
+                    const int targetY = playerY >> 16;
+                    if (landerY < targetY)
+                        object.vy += 0x2000;
+                    else if (landerY > targetY)
+                        object.vy -= 0x2000;
+                    object.vy = std::max(-0x8000, std::min(0x8000, object.vy));
+                }
+
+                object.x = WrapWorldX(object.x + object.vx);
+                object.y += object.vy;
+                break;
+        }
+    }
+}
+
+void DefenderGame::ResolveCollisions()
+{
+    for (std::size_t li = 0; li < objects.size(); ++li)
+    {
+        DefObject& lander = objects[li];
+        if (lander.remove || lander.type != ObjectType::Lander || !lander.collidable)
+            continue;
+
+        const int lx = lander.x >> 16;
+        const int ly = lander.y >> 16;
+
+        if (!playerDead)
+        {
+            const int dx = std::abs(WrappedDelta(lx, playerX >> 16));
+            const int dy = std::abs(ly - (playerY >> 16));
+            if (dx < 6 && dy < 4)
+            {
+                DestroyPlayer();
+                continue;
+            }
+        }
+
+        for (std::size_t bi = 0; bi < objects.size(); ++bi)
+        {
+            DefObject& bullet = objects[bi];
+            if (bullet.remove || bullet.type != ObjectType::Bullet || !bullet.collidable)
+                continue;
+
+            const int dx = std::abs(WrappedDelta(lx, bullet.x >> 16));
+            const int dy = std::abs(ly - (bullet.y >> 16));
+            if (dx < 6 && dy < 4)
+            {
+                bullet.remove = true;
+                DestroyLander(li);
+                break;
+            }
+        }
+    }
+}
+
+void DefenderGame::RemoveDeadObjects()
+{
+    objects.erase(std::remove_if(objects.begin(), objects.end(),
+        [](const DefObject& object) { return object.remove; }), objects.end());
+}
+
+void DefenderGame::DrawFrame()
+{
+    if (!ValidateTexture())
+        return;
+
+    DrawMountains((playerX >> 16) - 22);
+
+    DrawSprite(5, 3, 12);
+    DrawSprite(39, 3, 13);
+    DrawSprite(22, ((playerY >> 16) >> 3) + 1, 7);
+
+    for (const DefObject& object : objects)
+    {
+        if (object.remove || object.type != ObjectType::Lander || object.shape != 4)
+            continue;
+
+        int scanX = WrappedDelta(object.x >> 16, playerX >> 16);
+        scanX = ((scanX >> 3) + 16) & 31;
+        scanX += 6;
+        const int scanY = ((object.y >> 16) >> 3) + 1;
+        DrawSprite(scanX, scanY, 5);
+    }
+
+    for (const DefObject& object : objects)
+    {
+        if (object.remove)
+            continue;
+        const int x = WrappedDelta(object.x >> 16, playerX >> 16) + 22;
+        const int y = object.y >> 16;
+        DrawSprite(x, y, object.shape);
+    }
+
+    if (resultStarted)
+    {
+        if ((resultCounter & 0x10) != 0)
+            DrawSprite(22, 18, won ? 11 : 10);
+    }
+    else if (!playerDead)
+    {
+        if (targetsRemaining <= 0 && ((targetsRemaining - 1) & 0x10) != 0)
+            DrawSprite(22, 18, 11);
+        DrawSprite(22, playerY >> 16, playerShape);
+    }
+
+    if (playerLives > 0)
+    {
+        for (int i = 0; i < playerLives; ++i)
+            DrawSprite(2, 1 + i * 2, 9);
+    }
+}
+
+void DefenderGame::DrawMountains(int offset)
+{
+    const int topOffset = (offset >> 1) & 63;
+    const int bottomOffset = offset & 63;
+
+    for (int x = 0; x < kScreenWidth; ++x)
+    {
+        const int sourceTopX = kArtworkX + ((topOffset + x) & 63);
+        const int sourceBottomX = kArtworkX + ((bottomOffset + x) & 63);
+
+        for (int y = 0; y < 25; ++y)
+            SetDestinationPixel(x, y, GetArtworkPixel(sourceTopX, y));
+        for (int y = 25; y < kScreenHeight; ++y)
+            SetDestinationPixel(x, y, GetArtworkPixel(sourceBottomX, y));
+    }
+}
+
+void DefenderGame::DrawSprite(int destX, int destY, int shape)
+{
+    if (shape < 0 || shape >= static_cast<int>(sizeof(kShapes) / sizeof(kShapes[0])))
+        return;
+
+    const ShapeDef& s = kShapes[shape];
+    const int startX = destX - s.width / 2;
+    const int startY = destY - s.height / 2;
+
+    for (int x = 0; x < s.width; ++x)
+    {
+        const int dx = startX + x;
+        if (dx < 0 || dx >= kScreenWidth)
+            continue;
+
+        for (int y = 0; y < s.height; ++y)
+        {
+            const int dy = startY + y;
+            if (dy < 0 || dy >= kScreenHeight)
+                continue;
+
+            const uint8_t colour = GetArtworkPixel(s.sourceX + x, s.sourceY + y);
+            if (colour != 0)
+                SetDestinationPixel(dx, dy, colour);
+        }
+    }
+}
+
+void DefenderGame::SetDestinationPixel(int x, int y, uint8_t colour)
+{
+    if (!ValidateTexture() || x < 0 || x >= kScreenWidth || y < 0 || y >= kScreenHeight)
+        return;
+
+    (*columns)[baseColumn + kDestinationX + static_cast<std::size_t>(x)].data[kDestinationY + y] = colour;
+}
+
+uint8_t DefenderGame::GetArtworkPixel(int x, int y) const
+{
+    if (!ValidateTexture() || x < kArtworkX || x >= kArtworkX + 64 || y < 0 || y >= 64)
+        return 0;
+
+    return (*columns)[baseColumn + static_cast<std::size_t>(x)].data[y];
+}
+
+int32_t DefenderGame::WrapWorldX(int32_t value)
+{
+    return static_cast<int32_t>(static_cast<uint32_t>(value) & 0x00FFFFFFu);
+}
+
+int DefenderGame::WrappedDelta(int lhs, int rhs)
+{
+    int delta = lhs - rhs;
+    delta &= 255;
+    if (delta >= 128)
+        delta -= 256;
+    return delta;
+}
+
+int DefenderGame::RandomSigned16()
+{
+    return static_cast<int16_t>(GloomMaths::RndW());
+}
+
+
 
 // --------- Minimal loader for cheats.txt (no dependency on Cheats::Load) ---------
 static bool g_CheatsLoadedOnceGL = false;
@@ -95,6 +667,77 @@ void GameLogic::Init(ObjectGraphics* ograph)
 	p1reload = 5;
 
 	playerhit = false;
+	playerDeathActive = false;
+	lifeDebitedForCurrentDeath = false;
+	gameOverRequested = false;
+	defenderGame.Reset();
+	defenderSessionActive = false;
+	defenderLocking = false;
+	defenderRewardApplied = false;
+	defenderOrbitSpeed = 0;
+}
+
+void GameLogic::RestoreTriggeredEvents(const std::vector<uint32_t>& events)
+{
+	for (const uint32_t eventId : events)
+	{
+		// Events below 19 are one-shot triggers in the original game logic.
+		// Higher event numbers remain repeatable after loading.
+		if (eventId >= 2 && eventId < 19 && eventId < 25)
+			eventhit[eventId] = true;
+	}
+}
+
+void GameLogic::SetLives(int lives)
+{
+	p1lives = static_cast<int16_t>(std::max(0, std::min(5, lives)));
+	playerDeathActive = false;
+	lifeDebitedForCurrentDeath = false;
+	if (p1lives > 0)
+		gameOverRequested = false;
+}
+
+bool GameLogic::AwardLife()
+{
+	if (p1lives >= 5)
+		return false;
+
+	++p1lives;
+	return true;
+}
+
+void GameLogic::NotifyPlayerDeathStarted()
+{
+	if (!playerDeathActive)
+	{
+		playerDeathActive = true;
+		lifeDebitedForCurrentDeath = false;
+	}
+}
+
+void GameLogic::CommitPlayerDeath()
+{
+	NotifyPlayerDeathStarted();
+	if (lifeDebitedForCurrentDeath)
+		return;
+
+	if (p1lives > 0)
+		--p1lives;
+
+	lifeDebitedForCurrentDeath = true;
+	SDL_Log("ZGloom Lives: player death committed; lives=%d", p1lives);
+}
+
+void GameLogic::RequestGameOver()
+{
+	gameOverRequested = true;
+}
+
+bool GameLogic::ConsumeGameOverRequest()
+{
+	const bool requested = gameOverRequested;
+	gameOverRequested = false;
+	return requested;
 }
 
 void GameLogic::ResetPlayer(MapObject& o)
@@ -113,6 +756,8 @@ void GameLogic::ResetPlayer(MapObject& o)
 	o.data.ms.invisible = 0;
 	o.data.ms.thermo = 0;
 	o.data.ms.bouncecnt = 0;
+	playerDeathActive = false;
+	lifeDebitedForCurrentDeath = false;
 }
 
 void GameLogic::InitLevel(GloomMap* gmapin, Camera* cam, ObjectGraphics* ograph)
@@ -123,6 +768,14 @@ void GameLogic::InitLevel(GloomMap* gmapin, Camera* cam, ObjectGraphics* ograph)
 	levelfinishednow = false;
 	sucking = 0;
 	sucker = 0;
+	playerDeathActive = false;
+	lifeDebitedForCurrentDeath = false;
+	gameOverRequested = false;
+	defenderGame.Reset();
+	defenderSessionActive = false;
+	defenderLocking = false;
+	defenderRewardApplied = false;
+	defenderOrbitSpeed = 0;
 	std::fill(animframe, animframe + 160, 0);
 
 	for (auto e = 0; e < 25; e++)
@@ -195,16 +848,62 @@ bool GameLogic::AdjustPos(int32_t& overshoot, Quick& x, Quick& z, int32_t r, int
 
 void GameLogic::MoveBlood()
 {
+	// Floor pools and wall splats are level-local and permanent once fully
+	// grown.  Saturating the age keeps the render calculation cheap and avoids
+	// ever-growing counters.
+	for (auto& pool : gmap->GetBloodPools())
+	{
+		if (pool.age < 24)
+			++pool.age;
+	}
+	for (auto& splat : gmap->GetWallBloodSplats())
+	{
+		if (splat.age < 20)
+			++splat.age;
+	}
+
 	for (auto &b : gmap->GetBlood())
 	{
 		//TODO: sucking, screen splatter
 
 		if (b.y.GetInt() < 0)
 		{
-			// normal blood
-			b.x = b.x + b.xvec;
-			b.y = b.y + b.yvec;
-			b.z = b.z + b.zvec;
+			// Normal airborne blood.  MASSACRE particles now collide with wall
+			// geometry before the position is committed.  The contact point is
+			// stored as a persistent wall decal and the particle stops there.
+			Quick nextx = b.x + b.xvec;
+			Quick nexty = b.y + b.yvec;
+			Quick nextz = b.z + b.zvec;
+
+			if (Config::BloodPoolsEnabled() && nexty.GetInt() < -4 &&
+				nexty.GetInt() > -252)
+			{
+				int32_t overshoot = 0;
+				int32_t closestzone = -1;
+				// BloodSpeed3 can move by roughly eight world units per tick.  A
+				// radius of eight therefore catches fast particles without making
+				// parallel flights stain unrelated nearby walls.
+				if (Collision(false, nextx.GetInt(), nextz.GetInt(), 8,
+					overshoot, closestzone) && closestzone >= 0)
+				{
+					Zone& wall = gmap->GetZones()[closestzone];
+					const int oldDistance = FindSegDist(
+						b.x.GetInt(), b.z.GetInt(), wall);
+					const int newDistance = FindSegDist(
+						nextx.GetInt(), nextz.GetInt(), wall);
+					if (newDistance <= oldDistance || oldDistance < 8)
+					{
+						AddWallBloodSplat(closestzone, nextx, nexty, nextz,
+							b.color);
+						b.killme = true;
+						continue;
+					}
+				}
+			}
+
+			b.x = nextx;
+			b.y = nexty;
+			b.z = nextz;
 
 			Quick temp;
 			temp.SetVal(0x8000);
@@ -274,6 +973,189 @@ void GameLogic::MoveBlood()
 			++b;
 		}
 	}
+}
+
+void GameLogic::AddBloodPoolAt(Quick x, Quick z, uint32_t colour,
+	uint64_t sourceKey, uint64_t ownerKey, int targetRadius)
+{
+	if (!gmap || !Config::BloodPoolsEnabled())
+		return;
+
+	colour &= 0x0FFFu;
+	if (colour == 0)
+		return;
+
+	// Each emitter may create exactly one mark.  Central pools use the enemy ID;
+	// landed gore chunks use their own object IDs while retaining the enemy ID
+	// as owner so the number of satellite pools can be bounded.
+	for (const auto& pool : gmap->GetBloodPools())
+	{
+		if (sourceKey != 0 && pool.source == sourceKey)
+			return;
+	}
+
+	static const std::size_t kMaxBloodPools = 64;
+	auto& pools = gmap->GetBloodPools();
+	if (pools.size() >= kMaxBloodPools)
+		pools.pop_front();
+
+	BloodPool pool;
+	pool.x = x;
+	pool.z = z;
+	pool.color = colour;
+	pool.source = sourceKey;
+	pool.owner = ownerKey;
+	pool.age = 0;
+	if (targetRadius < 10) targetRadius = 10;
+	if (targetRadius > 72) targetRadius = 72;
+	pool.targetRadius = static_cast<uint16_t>(targetRadius);
+
+	const uint32_t mix = static_cast<uint32_t>(sourceKey) ^
+		static_cast<uint32_t>(sourceKey >> 32) ^
+		static_cast<uint32_t>(ownerKey) ^
+		static_cast<uint32_t>(ownerKey >> 32) ^
+		static_cast<uint32_t>(x.GetInt() * 131) ^
+		static_cast<uint32_t>(z.GetInt() * 313);
+	pool.seed = static_cast<uint16_t>(mix ^ (mix >> 16));
+
+	pools.push_back(pool);
+}
+
+void GameLogic::AddBloodPool(MapObject& source, int radiusPercent)
+{
+	if (!gmap || !Config::BloodPoolsEnabled())
+		return;
+
+	int radius = source.data.ms.rad;
+	if (radius <= 0)
+		radius = 36;
+	radius = (radius * source.data.ms.scale) / 0x100;
+	if (radius < 28) radius = 28;
+	if (radius > 72) radius = 72;
+
+	if (radiusPercent < 25) radiusPercent = 25;
+	if (radiusPercent > 100) radiusPercent = 100;
+	radius = (radius * radiusPercent + 50) / 100;
+	if (radius < 16) radius = 16;
+
+	AddBloodPoolAt(source.x, source.z, source.data.ms.blood,
+		source.identifier, source.identifier, radius);
+}
+
+void GameLogic::AddChunkBloodPool(MapObject& chunk)
+{
+	if (!gmap || !Config::BloodPoolsEnabled())
+		return;
+
+	const uint32_t colour = chunk.data.ms.blood & 0x0FFFu;
+	if (colour == 0)
+		return;
+
+	const uint64_t owner = chunk.data.ms.washit != 0 ?
+		chunk.data.ms.washit : chunk.identifier;
+
+	// Large enemies can emit the same gore set several times.  A bounded number
+	// of landed-piece pools keeps the result readable and protects slower
+	// devices while still distributing the stains over the actual landing area.
+	int satellites = 0;
+	for (const auto& pool : gmap->GetBloodPools())
+	{
+		if (pool.owner == owner && pool.source != owner)
+			++satellites;
+	}
+	static const int kMaxChunkPoolsPerEnemy = 12;
+	if (satellites >= kMaxChunkPoolsPerEnemy)
+		return;
+
+	int radius = chunk.data.ms.rad;
+	if (radius <= 0)
+		radius = 28;
+	radius = (radius * chunk.data.ms.scale) / 0x200;
+	radius = radius / 3;
+
+	// Give differently shaped chunks slightly different stain sizes without
+	// introducing another RNG dependency into the simulation.
+	const int frame = static_cast<int>((chunk.data.ms.frame >> 16) & 0xFFFFu);
+	radius += (frame & 3) * 2;
+	if (radius < 12) radius = 12;
+	if (radius > 28) radius = 28;
+
+	AddBloodPoolAt(chunk.x, chunk.z, colour,
+		chunk.identifier, owner, radius);
+}
+
+void GameLogic::AddWallBloodSplat(int zoneIndex, Quick x, Quick y, Quick z,
+	uint32_t colour)
+{
+	if (!gmap || !Config::BloodPoolsEnabled())
+		return;
+
+	colour &= 0x0FFFu;
+	if (colour == 0 || zoneIndex < 0 ||
+		zoneIndex >= static_cast<int>(gmap->GetZones().size()))
+		return;
+
+	Zone& zone = gmap->GetZones()[zoneIndex];
+	if (zone.ztype != Zone::ZT_WALL || (zone.a == 0 && zone.b == 0))
+		return;
+
+	const int64_t dx = static_cast<int64_t>(zone.x2) - zone.x1;
+	const int64_t dz = static_cast<int64_t>(zone.z2) - zone.z1;
+	const int64_t len2 = dx * dx + dz * dz;
+	if (len2 <= 0)
+		return;
+
+	int64_t dot = (static_cast<int64_t>(x.GetInt()) - zone.x1) * dx +
+		(static_cast<int64_t>(z.GetInt()) - zone.z1) * dz;
+	if (dot < 0) dot = 0;
+	if (dot > len2) dot = len2;
+	const uint16_t along = static_cast<uint16_t>((dot * 65535 + len2 / 2) / len2);
+
+	int wallY = y.GetInt();
+	if (wallY > -8) wallY = -8;
+	if (wallY < -248) wallY = -248;
+
+	// Nearby particles on the same wall merge into a larger irregular mark.
+	// This keeps a 31-particle death burst readable while preserving isolated
+	// droplets farther away.
+	auto& splats = gmap->GetWallBloodSplats();
+	const int wallLength = zone.ln > 0 ? zone.ln : 256;
+	for (auto& splat : splats)
+	{
+		if (splat.zone != static_cast<uint32_t>(zoneIndex) ||
+			splat.color != colour)
+			continue;
+		const int alongWorld =
+			(static_cast<int>(along) - static_cast<int>(splat.along)) *
+			wallLength / 65535;
+		const int dy = wallY - splat.y;
+		if (alongWorld * alongWorld + dy * dy <= 18 * 18)
+		{
+			if (splat.targetRadius < 34)
+				splat.targetRadius = static_cast<uint16_t>(
+					std::min(34, static_cast<int>(splat.targetRadius) + 2));
+			if (splat.age > 4) splat.age = 4;
+			return;
+		}
+	}
+
+	static const std::size_t kMaxWallBloodSplats = 64;
+	if (splats.size() >= kMaxWallBloodSplats)
+		splats.pop_front();
+
+	WallBloodSplat splat;
+	splat.zone = static_cast<uint32_t>(zoneIndex);
+	splat.along = along;
+	splat.y = static_cast<int16_t>(wallY);
+	splat.color = colour;
+	splat.age = 0;
+
+	const uint32_t mix = static_cast<uint32_t>(zoneIndex * 977) ^
+		static_cast<uint32_t>(along * 131u) ^
+		static_cast<uint32_t>((wallY + 256) * 313) ^ colour;
+	splat.seed = static_cast<uint16_t>(mix ^ (mix >> 16));
+	splat.targetRadius = static_cast<uint16_t>(18 + (splat.seed & 7u));
+	splats.push_back(splat);
 }
 
 void GameLogic::DoDoor()
@@ -742,6 +1624,166 @@ int32_t GameLogic::FindSegDist(int32_t x, int32_t z, Zone& zone)
 	return 0x3FFF;
 }
 
+DefenderGame::InputState GameLogic::ReadDefenderInput() const
+{
+	DefenderGame::InputState input;
+	const Uint8* keys = SDL_GetKeyboardState(nullptr);
+
+	const bool left = keys[Config::GetKey(Config::KEY_LEFT)] != 0 ||
+		keys[Config::GetKey(Config::KEY_SLEFT)] != 0;
+	const bool right = keys[Config::GetKey(Config::KEY_RIGHT)] != 0 ||
+		keys[Config::GetKey(Config::KEY_SRIGHT)] != 0;
+	const bool up = keys[Config::GetKey(Config::KEY_UP)] != 0;
+	const bool down = keys[Config::GetKey(Config::KEY_DOWN)] != 0;
+
+	input.moveX = (right ? 1 : 0) - (left ? 1 : 0);
+	input.moveY = (down ? 1 : 0) - (up ? 1 : 0);
+	input.fire = keys[Config::GetKey(Config::KEY_SHOOT)] != 0;
+
+	if (Config::HaveController())
+	{
+		const Sint32 axisX = Config::GetControllerX();
+		const Sint32 axisY = Config::GetControllerY();
+		if (axisX < -8000 || Config::GetControllerLeft()) input.moveX = -1;
+		if (axisX >  8000 || Config::GetControllerRight()) input.moveX = 1;
+		if (axisY < -8000 || Config::GetControllerUp()) input.moveY = -1;
+		if (axisY >  8000 || Config::GetControllerDown()) input.moveY = 1;
+		if (Config::GetControllerFire() || Config::GetControllerConfirm()) input.fire = true;
+	}
+
+	if (SDL_GetMouseState(nullptr, nullptr) != 0)
+		input.fire = true;
+
+	return input;
+}
+
+bool GameLogic::BeginDefenderSession(const Teleport& tele)
+{
+	std::vector<Column>* textureColumns = nullptr;
+	std::size_t textureBaseColumn = 0;
+	if (!gmap || tele.textureIndex < 0 ||
+		!gmap->ResolveTextureColumns(tele.textureIndex, textureColumns, textureBaseColumn))
+	{
+		SDL_Log("ZGloom Defender: monitor texture %d could not be resolved", tele.textureIndex);
+		return false;
+	}
+
+	int episode = SaveSystem::GetCurrentFlat();
+	if (episode < 1) episode = 1;
+	if (episode > 3) episode = 3;
+
+	if (!defenderGame.Begin(textureColumns, textureBaseColumn, episode))
+	{
+		SDL_Log("ZGloom Defender: texture %d has no embedded Defender artwork", tele.textureIndex);
+		return false;
+	}
+
+	defenderTeleport = tele;
+	defenderSessionActive = true;
+	defenderLocking = true;
+	defenderRewardApplied = false;
+	defenderOrbitSpeed = 0;
+	firedown = true;
+
+	SDL_Log("ZGloom Defender: started event %d, texture=%d, episode=%d, target=%d",
+		tele.ev, tele.textureIndex, episode, defenderGame.GetTargetsRemaining());
+	return true;
+}
+
+void GameLogic::UpdateDefenderSession(Camera* cam, MapObject& playerobj)
+{
+	if (!defenderSessionActive || !cam)
+		return;
+
+	const DefenderGame::InputState input = ReadDefenderInput();
+
+	if (defenderLocking)
+	{
+		auto StepPosition = [](int current, int target) -> int
+		{
+			const int delta = target - current;
+			if (delta > 2) return current + 2;
+			if (delta < -2) return current - 2;
+			return target;
+		};
+
+		const int newX = StepPosition(playerobj.x.GetInt(), defenderTeleport.x);
+		const int newZ = StepPosition(playerobj.z.GetInt(), defenderTeleport.z);
+		int currentRot = playerobj.data.ms.rotquick.GetInt() & 255;
+		const int targetRot = defenderTeleport.rot & 255;
+		int rotDelta = (targetRot - currentRot) & 255;
+		if (rotDelta >= 128) rotDelta -= 256;
+		if (rotDelta > 4) rotDelta = 4;
+		if (rotDelta < -4) rotDelta = -4;
+		currentRot = (currentRot + rotDelta) & 255;
+
+		playerobj.x.SetInt(newX);
+		playerobj.z.SetInt(newZ);
+		playerobj.data.ms.rotquick.SetInt(currentRot);
+		playerobj.data.ms.rotspeed = 0;
+		playerobj.data.ms.bounce = 0;
+		cam->x = playerobj.x;
+		cam->z = playerobj.z;
+		cam->rotquick = playerobj.data.ms.rotquick;
+		cam->y = -(playerobj.y.GetInt() + playerobj.data.ms.eyey);
+
+		if (newX == defenderTeleport.x && newZ == defenderTeleport.z && currentRot == targetRot)
+		{
+			defenderLocking = false;
+			SDL_Log("ZGloom Defender: player locked to monitor");
+		}
+		return;
+	}
+
+	// Match the original atmachine behaviour: horizontal Defender movement also
+	// gives the camera a small, damped orbit in front of the monitor.
+	if (input.moveX < 0)
+		defenderOrbitSpeed = std::max(-8, defenderOrbitSpeed - 1);
+	else if (input.moveX > 0)
+		defenderOrbitSpeed = std::min(8, defenderOrbitSpeed + 1);
+	else if (defenderOrbitSpeed < 0)
+		defenderOrbitSpeed = std::min(0, defenderOrbitSpeed + 2);
+	else if (defenderOrbitSpeed > 0)
+		defenderOrbitSpeed = std::max(0, defenderOrbitSpeed - 2);
+
+	const int viewRot = (defenderTeleport.rot + defenderOrbitSpeed) & 255;
+	Quick orbitRot[4];
+	GloomMaths::GetCamRot(static_cast<uint8_t>((viewRot - 64) & 255), orbitRot);
+	Quick radius;
+	radius.SetInt(defenderOrbitSpeed * 6);
+	playerobj.x.SetInt(defenderTeleport.x);
+	playerobj.z.SetInt(defenderTeleport.z);
+	playerobj.x = playerobj.x - orbitRot[1] * radius;
+	playerobj.z = playerobj.z + orbitRot[0] * radius;
+	playerobj.data.ms.rotquick.SetInt(viewRot);
+	playerobj.data.ms.bounce = 0;
+	cam->x = playerobj.x;
+	cam->z = playerobj.z;
+	cam->rotquick = playerobj.data.ms.rotquick;
+	cam->y = -(playerobj.y.GetInt() + playerobj.data.ms.eyey);
+
+	defenderGame.Update(input);
+
+	if (defenderGame.DidWin() && !defenderRewardApplied)
+	{
+		// Defender awards one main-game life, capped at five as requested.
+		// Further wins remain valid but the surplus reward is discarded.
+		const bool awarded = AwardLife();
+		defenderRewardApplied = true;
+		SDL_Log("ZGloom Defender: won; main-game reserve lives=%d%s",
+			p1lives, awarded ? "" : " (maximum reached; reward discarded)");
+	}
+
+	if (defenderGame.IsComplete())
+	{
+		defenderSessionActive = false;
+		defenderLocking = false;
+		defenderOrbitSpeed = 0;
+		firedown = false;
+		SDL_Log("ZGloom Defender: session complete (%s)", defenderGame.DidWin() ? "WIN" : "LOSS");
+	}
+}
+
 bool GameLogic::Update(Camera* cam)
 {
 	Quick inc;
@@ -830,7 +1872,11 @@ bool GameLogic::Update(Camera* cam)
 		}
 	}
 
-	if (playerobj.data.ms.logic == NullLogic)
+	if (defenderSessionActive)
+	{
+		UpdateDefenderSession(cam, playerobj);
+	}
+	else if (playerobj.data.ms.logic == NullLogic)
 	{
 		playerobj.x = cam->x;
 		playerobj.y.SetInt(0);
@@ -1132,9 +2178,16 @@ bool GameLogic::Update(Camera* cam)
 
 		if (gotele && !levelfinished)
 		{
-			// teleport animation
-			activetele = tele;
-			playerobj.data.ms.pixsizeadd = 2;
+			if (tele.IsMonitorLock())
+			{
+				BeginDefenderSession(tele);
+			}
+			else
+			{
+				// normal teleport animation
+				activetele = tele;
+				playerobj.data.ms.pixsizeadd = 2;
+			}
 		}
 	}
 	else
@@ -1323,6 +2376,7 @@ bool GameLogic::Update(Camera* cam)
 
 	if (squished &&  (playerobj.data.ms.hitpoints <= 0))
 	{
+		NotifyPlayerDeathStarted();
 		playerobj.data.ms.hitpoints = 0;
 		playerobj.data.ms.logic = PlayerDeath;
 

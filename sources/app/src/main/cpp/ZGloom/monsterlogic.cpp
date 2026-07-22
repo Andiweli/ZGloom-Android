@@ -212,7 +212,15 @@ void WeaponLogic(MapObject& o, GameLogic* logic)
 
 	GloomMaths::GetCamRotRaw(o.data.ms.movspeed & 127, camrots);
 
-	o.y.SetInt(camrots[1] >> 8);
+	// Match the corrected GloomReforged behaviour: the sine bob may rise to
+	// its full height, but its downward half is clamped so the pickup turns
+	// around roughly 20 world pixels above the floor instead of dipping into it.
+	int weaponY = camrots[1] >> 8;
+	if (weaponY > -20)
+	{
+		weaponY = -20;
+	}
+	o.y.SetInt(weaponY);
 
 	o.data.ms.frame += (1 << 16);
 	if ((o.data.ms.frame >> 16) >= o.data.ms.shape->size())
@@ -1322,6 +1330,12 @@ void ChunkLogic(MapObject& o, GameLogic* logic)
 
 	if (o.y.GetVal() >= 0)
 	{
+		// The chunk's x/z coordinates are now its true resting point.  MASSACRE
+		// places a small, independently growing pool here, so the final stain
+		// pattern follows the scattered body parts instead of remaining centred
+		// entirely on the enemy's original position.
+		o.y.SetInt(0);
+		logic->AddChunkBloodPool(o);
 		SoundHandler::Play(SoundHandler::SOUND_SPLAT);
 		o.data.ms.logic = NullLogic;
 		return;
@@ -1389,7 +1403,11 @@ void BlowChunx(MapObject& thisobj, MapObject& otherobj, GameLogic* logic)
 		//chunks.data.ms.shape = scale;
 		chunks.data.ms.rad = logic->objectgraphics->maxwidthsgore[thisobj.t];
 		chunks.data.ms.radsq = chunks.data.ms.rad*chunks.data.ms.rad;
-		chunks.data.ms.blood = 0;
+		// Preserve the dead enemy's blood colour and ID. washit is unused for
+		// non-colliding gore chunks and safely carries the owning enemy ID until
+		// the chunk reaches the floor.
+		chunks.data.ms.blood = thisobj.data.ms.blood;
+		chunks.data.ms.washit = thisobj.identifier;
 
 		logic->newobjects.push_back(chunks);
 	}
@@ -1398,6 +1416,8 @@ void BlowChunx(MapObject& thisobj, MapObject& otherobj, GameLogic* logic)
 void BlowObject(MapObject& thisobj, MapObject& otherobj, GameLogic* logic)
 {
 	SoundHandler::Play(SoundHandler::SOUND_DIE);
+	const bool hasChunks = !logic->objectgraphics->GetGoreShape(thisobj.t).empty();
+	logic->AddBloodPool(thisobj, hasChunks ? 58 : 100);
 	BloodyMess2(thisobj, logic, 31);
 	BlowChunx(thisobj, otherobj, logic);
 	thisobj.killme = true;
@@ -1406,6 +1426,7 @@ void BlowObject(MapObject& thisobj, MapObject& otherobj, GameLogic* logic)
 void BlowObjectNoChunks(MapObject& thisobj, MapObject& otherobj, GameLogic* logic)
 {
 	SoundHandler::Play(SoundHandler::SOUND_DIE);
+	logic->AddBloodPool(thisobj);
 	BloodyMess2(thisobj, logic, 31);
 	BloodyMess2(thisobj, logic, 15);
 	thisobj.killme = true;
@@ -1430,6 +1451,8 @@ void HurtTerra(MapObject& thisobj, MapObject& otherobj, GameLogic* logic)
 void BlowTerra(MapObject& thisobj, MapObject& otherobj, GameLogic* logic)
 {
 	SoundHandler::Play(SoundHandler::SOUND_ROBODIE);
+	const bool hasChunks = !logic->objectgraphics->GetGoreShape(thisobj.t).empty();
+	logic->AddBloodPool(thisobj, hasChunks ? 58 : 100);
 	BlowChunx(thisobj, otherobj, logic);
 	thisobj.killme = true;
 }
@@ -2101,11 +2124,22 @@ void PlayerDead(MapObject& o, GameLogic* logic)
 	beq.s	.allover
 	rts
 	*/
-	o.data.ms.delay--;
+	if (o.data.ms.delay > 0)
+		--o.data.ms.delay;
 
-	if (o.data.ms.delay) return;
+	if (o.data.ms.delay > 0)
+		return;
 
-	logic->ResetPlayer(o);
+	if (logic->HasRemainingLives())
+	{
+		logic->ResetPlayer(o);
+	}
+	else
+	{
+		// Keep the player inert on the ground.  The main loop consumes this
+		// request on the same 25 Hz tick and returns to the title menu.
+		logic->RequestGameOver();
+	}
 }
 
 void PlayerDeath(MapObject& o, GameLogic* logic)
@@ -2136,6 +2170,7 @@ void PlayerDeath(MapObject& o, GameLogic* logic)
 	*/
 
 	o.data.ms.eyey = -32;
+	logic->CommitPlayerDeath();
 	o.data.ms.logic = PlayerDead;
 	o.data.ms.delay = 63;
 }
@@ -2150,6 +2185,7 @@ void PlayerDie(MapObject& thisobj, MapObject& otherobj, GameLogic* logic)
 	clr	ob_collwith(a5)
 	*/
 
+	logic->NotifyPlayerDeathStarted();
 	thisobj.data.ms.hitpoints = 0;
 	thisobj.data.ms.logic = PlayerDeath;
 
@@ -2585,6 +2621,7 @@ void BlowDragon(MapObject& thisobj, MapObject& otherobj, GameLogic* logic)
 	SoundHandler::Play(SoundHandler::SOUND_DIE);
 	SoundHandler::Play(SoundHandler::SOUND_ROBODIE);
 	SoundHandler::Play(SoundHandler::SOUND_ROBODIE);
+	logic->AddBloodPool(thisobj, 62);
 
 	BloodyMess2(thisobj, logic, 63);
 

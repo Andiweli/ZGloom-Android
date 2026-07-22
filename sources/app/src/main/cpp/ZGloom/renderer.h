@@ -79,7 +79,11 @@ class Renderer
 		void DrawColumn(int32_t x, int32_t ystart, int32_t h, Column* texturedata, int32_t z, int32_t palused);
 		void DrawCeil(Camera* camera);
 		void DrawDust(Camera* camera, float dt);
+		void DrawWallBloodSplats(Camera* camera);
+		void DrawWallReflections();
+		void DrawObjectFloorEffects(Camera* camera);
 		void DrawObjects(Camera* camera);
+		void DrawBloodPools(Camera* camera);
 		void DrawBlood(Camera* camera);
 		void ApplyTeleportPixelate();
 		Column* GetTexColumn(int hitzone, Quick texpos, int& basetexture);
@@ -98,6 +102,7 @@ class Renderer
 		std::vector<int32_t> zbuff;
 		std::vector<int32_t> ceilend;
 		std::vector<int32_t> floorstart;
+		std::vector<int32_t> reflectioncover;
 
 		// I'm not sure how gloom does screen dimming, I've implemented my own lookup tables
 		static const uint32_t darkpalettes[16][16];

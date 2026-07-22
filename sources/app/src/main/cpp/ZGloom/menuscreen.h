@@ -59,16 +59,29 @@ private:
         MENUSTATUS_CONTROLOPTIONS,
         MENUSTATUS_DISPLAYOPTIONS,
         MENUSTATUS_CHEATOPTIONS,
-        MENUSTATUS_EFFECTSOPTIONS
+        MENUSTATUS_EFFECTSOPTIONS,
+        MENUSTATUS_COUNT
     };
 
     MENUSTATUS status;
     int selection;
     int timer;
 
+    // Each submenu remembers exactly where it was entered from. Returning with
+    // B/ESC therefore restores the parent entry instead of jumping to CONTINUE.
+    MENUSTATUS parentStatus[MENUSTATUS_COUNT];
+    int parentSelection[MENUSTATUS_COUNT];
+    bool parentValid[MENUSTATUS_COUNT];
+
     void HandleKeyMenu(SDL_Keycode sym);
     MenuReturn HandleStandardMenu(SDL_Keycode sym, std::vector<MenuEntry>& menu);
     void DisplayStandardMenu(std::vector<MenuEntry>& menu, bool flash, int scale, SDL_Surface* dest, Font& font);
+
+    void EnterSubmenu(MENUSTATUS nextStatus);
+    bool ReturnToParentMenu();
+    static bool IsBinaryIntEntry(const MenuEntry& entry);
+    static void IncrementIntEntry(MenuEntry& entry);
+    static void DecrementIntEntry(MenuEntry& entry);
 
     std::vector<MenuEntry> soundmenu;
     std::vector<MenuEntry> mainmenu;

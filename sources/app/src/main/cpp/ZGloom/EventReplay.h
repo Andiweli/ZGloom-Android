@@ -1,17 +1,21 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 
 class GloomMap;
 
-// Vita-style event replay stub.
-// On each ExecuteEvent() call we record the event ID into a simple list.
-// This list is persisted in a small file (last.events) and can be replayed
-// after a level reload to restore button/door state.
+// Persistent event history used by SAVE POSITION.
+// Event 1 is the map-initialisation event and is deliberately never stored.
+// Replaying uses GloomMap's persistent-only mode, so teleports, sounds and
+// monster spawning are not triggered a second time after loading.
 namespace EventReplay
 {
     void Clear();
     void Record(uint32_t ev);
+
+    void SetEvents(const std::vector<uint32_t>& events);
+    const std::vector<uint32_t>& GetEvents();
 
     bool HasReplay();
     bool LoadFromDisk();

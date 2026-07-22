@@ -1,9 +1,9 @@
 #pragma once
 #include <sdl2/SDL.h>
 #include "font.h"
+#include "script.h"
 
 #include <vector>
-#include <string>
 
 class TitleScreen
 {
@@ -18,13 +18,12 @@ public:
 
     TitleScreen();
     void Render(SDL_Surface* src, SDL_Surface* dest, Font& font);
-    void Clock() { timer++; };
-    bool WantsPlainTitleBackground() const { return status != TITLESTATUS_MAIN; };
+    void Clock() { timer++; }
+    void UpdateControllerHold(bool upHeld, bool downHeld);
+    void ResetToMain() { status = TITLESTATUS_MAIN; selection = MAINENTRY_RESUME; timer = 0; heldDirection = 0; repeatCountdown = 0; }
+    bool WantsPlainTitleBackground() const { return status != TITLESTATUS_MAIN; }
     TitleReturn Update(SDL_Event& tevent, int& levelout);
-    void SetLevels(std::vector<std::string> names)
-    {
-        levelnames = names;
-    };
+    void SetLevels(const std::vector<LevelDescriptor>& newLevels);
 
 private:
     enum TITLESTATUS
@@ -44,9 +43,12 @@ private:
         MAINENTRY_END
     };
 
-    std::vector<std::string> levelnames;
+    std::vector<LevelDescriptor> levels;
     TITLESTATUS status;
     int selection;
     int timer;
-};
+    int heldDirection;
+    int repeatCountdown;
 
+    void MoveLevelSelection(int direction);
+};

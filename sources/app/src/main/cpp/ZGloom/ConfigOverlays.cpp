@@ -21,6 +21,7 @@ namespace Config {
     static int g_scan        = 0;  // 0/1
     static int g_scanInt     = 1;  // 0..5
     static int g_muzzle      = 1;  // 0/1  (default ON)
+    static int g_reflections = 0;  // 0=OFF, 1=OBJECTS, 2=ALL
 
 static std::string GetOverlayConfigPath()
 {
@@ -122,6 +123,7 @@ static std::string GetOverlayConfigPath()
             else if (!std::strcmp(key, "SCAN"))       g_scan      = (val != 0);
             else if (!std::strcmp(key, "SCAN_I")  || !std::strcmp(key, "SCAN_INTENSITY"))  g_scanInt  = clamp(val, 0, 5);
             else if (!std::strcmp(key, "MUZZLE"))     g_muzzle    = (val != 0);
+            else if (!std::strcmp(key, "REFLECTIONS")) g_reflections = clamp(val, 0, 2);
         }
 
         std::fclose(f);
@@ -140,6 +142,7 @@ static std::string GetOverlayConfigPath()
         kvs.push_back({"SCAN=",        std::to_string(g_scan)});
         kvs.push_back({"SCAN_I=",      std::to_string(g_scanInt)});
         kvs.push_back({"MUZZLE=",      std::to_string(g_muzzle)});
+        kvs.push_back({"REFLECTIONS=", std::to_string(g_reflections)});
         patchKeys(kvs);
     }
 
@@ -179,5 +182,9 @@ static std::string GetOverlayConfigPath()
     // ---- Muzzle flash ----
     int  GetMuzzleFlash(){ ensureLoaded(); return g_muzzle ? 1 : 0; }
     void SetMuzzleFlash(int s){ ensureLoaded(); g_muzzle = (s!=0); SaveOverlays(); }
+
+    // ---- World reflections ----
+    int  GetReflections(){ ensureLoaded(); return clamp(g_reflections, 0, 2); }
+    void SetReflections(int s){ ensureLoaded(); g_reflections = clamp(s, 0, 2); SaveOverlays(); }
 
 } // namespace Config

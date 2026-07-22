@@ -4,6 +4,7 @@
 #include "soundhandler.h"
 #include "SaveSystem.h"
 #include "EventReplay.h"
+#include <cstring>
 
 
 static uint16_t Get16(const uint8_t* p)
@@ -20,6 +21,7 @@ void Event::Load(const uint8_t* data, uint32_t evnum, std::vector<Object>& objec
 				 std::vector<RotPoly>& rotpolys, std::vector<Teleport>& teles)
 {
 	uint16_t op;
+	int16_t lastChangedTexture = -1;
 
 	do
 	{
@@ -52,6 +54,7 @@ void Event::Load(const uint8_t* data, uint32_t evnum, std::vector<Object>& objec
 				break;
 
 			case ET_TELEPORT:
+			{
 				Teleport tele;
 
 				tele.x = Get16(data); data += 2;
@@ -59,8 +62,10 @@ void Event::Load(const uint8_t* data, uint32_t evnum, std::vector<Object>& objec
 				tele.z = Get16(data); data += 2;
 				tele.rot = Get16(data); data += 2;
 				tele.ev = evnum;
+				tele.textureIndex = lastChangedTexture;
 				teles.push_back(tele);
 				break;
+			}
 				
 			case ET_LOADOBJECTS:
 				// ignore - we'll load everything
@@ -76,6 +81,7 @@ void Event::Load(const uint8_t* data, uint32_t evnum, std::vector<Object>& objec
 				tc.zone = Get16(data); data += 2;
 				tc.newtexture = Get16(data); data += 2;
 				tc.ev = evnum;
+				lastChangedTexture = static_cast<int16_t>(tc.newtexture);
 				tchanges.push_back(tc);
 				break;
 
@@ -231,6 +237,8 @@ bool GloomMap::Load(const char* name, ObjectGraphics* nobj)
 	activerotpolys.clear();
 	teles.clear();
 	activeblood.clear();
+	bloodpools.clear();
+	wallbloodsplats.clear();
 
 	objectlogic = nobj;
 
@@ -441,32 +449,37 @@ bool GloomMap::Load(const char* name, ObjectGraphics* nobj)
 	return true;
 }
 
-void GloomMap::SetFlat(char f)
+bool GloomMap::SetFlat(int f)
 {
+	if (f < 0)
+		return false;
+
+	const std::string suffix = std::to_string(f);
+	const std::string floorName = std::string("txts/floor") + suffix;
+	const std::string roofName  = std::string("txts/roof") + suffix;
+
+	// Load both surfaces into temporary objects first.  This prevents a failed
+	// roof load from leaving a new floor paired with the previous ceiling.
+	Flat newFloor;
+	Flat newCeil;
+	if (!newFloor.Load(floorName.c_str()) || !newCeil.Load(roofName.c_str()))
+		return false;
+
+	floor = newFloor;
+	ceil = newCeil;
 	hasflat = true;
 
-	std::string name = "txts/floor";
-
-	name += f + '0';
-
-	floor.Load(name.c_str());
-
-	name = "txts/roof";
-
-	name += f + '0';
-
-	ceil.Load(name.c_str());
-
-	// Remember current flat index for Save/Load (store as integer)
-	SaveSystem::SetCurrentFlat((int)f);
-	return;
+	SaveSystem::SetCurrentFlat(f);
+	return true;
 }
 
-void Flat::Load(const char* name)
+bool Flat::Load(const char* name)
 {
 	CrmFile file;
+	if (!file.Load(name) || !file.data || file.size < 128 * 128)
+		return false;
 
-	file.Load(name);
+	std::memset(palette, 0, sizeof(palette));
 
 	for (int x = 0; x < 128; x++)
 	{
@@ -477,10 +490,10 @@ void Flat::Load(const char* name)
 		}
 	}
 
-	// makeflat also indicates it dumps out the depth, but this isn't present in the files I've seen
-
+	// makeflat also indicates it dumps out the depth, but this isn't present
+	// in the files currently used by the supported games.
 	uint32_t palpos = 0;
-	for (uint32_t p = 128 * 128; p < file.size; p += 2)
+	for (uint32_t p = 128 * 128; p + 1 < file.size && palpos < 256; p += 2)
 	{
 		palette[palpos][0] = file.data[p + 0] & 0xF;
 		palette[palpos][1] = file.data[p + 1] >> 4;
@@ -493,7 +506,7 @@ void Flat::Load(const char* name)
 		palpos++;
 	}
 
-	return;
+	return true;
 }
 
 void Flat::DumpDebug(const char* name)
@@ -547,10 +560,35 @@ void GloomMap::DumpDebug()
 	}
 }
 
-void GloomMap::ExecuteEvent(uint32_t e, bool& gotele, Teleport& teleout, bool allowTeleport)
+bool GloomMap::ResolveTextureColumns(int textureIndex, std::vector<Column>*& outColumns, std::size_t& outBaseColumn)
 {
-	// Record event for Vita-style replay after load
-	EventReplay::Record(e);
+	outColumns = nullptr;
+	outBaseColumn = 0;
+
+	if (textureIndex < 0 || textureIndex >= 160)
+		return false;
+
+	const int fileIndex = textureIndex / 20;
+	const int textureInFile = textureIndex % 20;
+	if (fileIndex < 0 || fileIndex >= 8)
+		return false;
+
+	const std::size_t base = static_cast<std::size_t>(textureInFile) * 64u;
+	if (textures[fileIndex].columns.size() < base + 64u)
+		return false;
+
+	outColumns = &textures[fileIndex].columns;
+	outBaseColumn = base;
+	return true;
+}
+
+void GloomMap::ExecuteEvent(uint32_t e, bool& gotele, Teleport& teleout, bool allowTeleport, EventExecutionMode mode)
+{
+	const bool persistentReplay = (mode == EventExecutionMode::PersistentReplay);
+
+	if (!persistentReplay)
+		EventReplay::Record(e);
+
 	// add objects?
 	
 	// DEMOS events seem off by one? 
@@ -560,52 +598,59 @@ void GloomMap::ExecuteEvent(uint32_t e, bool& gotele, Teleport& teleout, bool al
 
 	//printf("EVENT: %i\n", e);
 
-	for (auto o : objects)
+	if (!persistentReplay)
 	{
-		if (o.ev == e)
+		for (auto o : objects)
 		{
-			MapObject mo(o);
-
-			CalcVecs(mo);
-
-			// ordering seems needed for collison?
-			if (mo.t == ObjectGraphics::OLT_PLAYER1)
+			if (o.ev == e)
 			{
-				mapobjects.push_front(mo);
-			}
-			else if (mo.t != ObjectGraphics::OLT_PLAYER2)
-			{
-				// DO NOTHING FOR P2: Invisible P2 object causes enemies to be hurt!
-				mapobjects.push_back(mo);
+				MapObject mo(o);
+
+				CalcVecs(mo);
+
+				// ordering seems needed for collision?
+				if (mo.t == ObjectGraphics::OLT_PLAYER1)
+				{
+					mapobjects.push_front(mo);
+				}
+				else if (mo.t != ObjectGraphics::OLT_PLAYER2)
+				{
+					// DO NOTHING FOR P2: Invisible P2 object causes enemies to be hurt!
+					mapobjects.push_back(mo);
+				}
 			}
 		}
 	}
 
-	// doors.
+	// doors
 	bool diddoor = false;
 
 	for (auto d : doors)
 	{
-		if (d.eventnum == e)
+		if (d.eventnum != e)
+			continue;
+
+		Zone& zone = zones[d.zone];
+
+		if (persistentReplay)
 		{
-			//zones[d.zone].x1 = zones[d.zone].x2 = -1;
-			//zones[d.zone].z1 = zones[d.zone].z2 = -1;
+			// A recorded door event represents a durable opened door.  Restoring
+			// the final geometry avoids replay sounds and avoids making the player
+			// wait for every previously opened door to animate again.
+			zone.open = 0x8000;
+			zone.x1 = -1;
+			zone.x2 = -1;
+			zone.z1 = -1;
+			zone.z2 = -1;
+		}
+		else
+		{
 			ActiveDoor ad;
-
-			/*
-			NOTE MOVE LONGS: This should copy Z's as well?
-
-			move.l	a1, do_poly(a0)
-			move.l	zo_lx(a1), do_lx(a0)
-			move.l	zo_rx(a1), do_rx(a0)
-			clr	do_frac(a0)
-			move	#$100, do_fracadd(a0)
-			*/
 			ad.do_poly = d.zone;
-			ad.do_lx = zones[d.zone].x1;
-			ad.do_rx = zones[d.zone].x2;
-			ad.do_lz = zones[d.zone].z1;
-			ad.do_rz = zones[d.zone].z2;
+			ad.do_lx = zone.x1;
+			ad.do_rx = zone.x2;
+			ad.do_lz = zone.z1;
+			ad.do_rz = zone.z2;
 			ad.do_frac = 0;
 			ad.do_fracadd = 0x100;
 
@@ -760,23 +805,26 @@ void GloomMap::ExecuteEvent(uint32_t e, bool& gotele, Teleport& teleout, bool al
 		}
 	}
 
-	if (diddoor) SoundHandler::Play(SoundHandler::SOUND_DOOR);
+	if (diddoor && !persistentReplay)
+		SoundHandler::Play(SoundHandler::SOUND_DOOR);
 
 	// teleports
 	// Event 24 is the level exit in the original Amiga code.  It still executes
 	// the event script, but teleport commands are ignored while finished2 is set,
 	// otherwise the slow blue beam-out would be replaced by the normal fast
 	// teleport animation.  allowTeleport lets GameLogic mirror that behaviour.
-	if (!allowTeleport)
-	{
+	if (!allowTeleport || persistentReplay)
 		return;
-	}
 
 	for (auto t : teles)
 	{
 		if (t.ev == e)
 		{
-			SoundHandler::Play(SoundHandler::SOUND_TELEPORT);
+			// A non-zero Y is the original game's special Defender monitor lock,
+			// not a spatial teleport.  It must not play the teleport sound or run
+			// the blue pixelation transition.
+			if (!t.IsMonitorLock())
+				SoundHandler::Play(SoundHandler::SOUND_TELEPORT);
 			gotele = true;
 			teleout = t;
 		}

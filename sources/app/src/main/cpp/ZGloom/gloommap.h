@@ -25,6 +25,40 @@ class Blood
 		Blood() { killme = false; };
 };
 
+// Persistent floor decal used by BLOOD: MASSACRE.  Coordinates are stored in
+// world space so the pool remains fixed while the camera moves.  The renderer
+// grows it from a small initial mark during the first few game ticks.
+class BloodPool
+{
+	public:
+		Quick x;
+		Quick z;
+		uint32_t color = 0;
+		// source uniquely identifies the exact emitter (enemy or individual gore
+		// chunk). owner groups all marks created by the same dead enemy.
+		uint64_t source = 0;
+		uint64_t owner = 0;
+		uint16_t age = 0;
+		uint16_t targetRadius = 40;
+		uint16_t seed = 0;
+};
+
+// Persistent wall decal used by BLOOD: MASSACRE.  The mark is attached to a
+// zone and stores its position as a 0..65535 fraction along that wall.  This
+// keeps it fixed to the correct wall even while the camera moves, and also
+// lets rotating polygons carry their stains with them.
+class WallBloodSplat
+{
+	public:
+		uint32_t zone = 0;
+		uint16_t along = 0;
+		int16_t y = -64;
+		uint32_t color = 0;
+		uint16_t age = 0;
+		uint16_t targetRadius = 22;
+		uint16_t seed = 0;
+};
+
 // rot/morph poly
 
 class ActiveRotPoly
@@ -77,14 +111,23 @@ class RotPoly
 	uint16_t ev;
 };
 
+enum class EventExecutionMode
+{
+	Normal,
+	PersistentReplay
+};
+
 class Teleport
 {
 	public:
 	int16_t x;
-	int16_t y; // unused?
+	int16_t y; // 0 = normal teleport, non-zero = Defender monitor lock
 	int16_t z;
 	int16_t rot;
 	int16_t ev;
+	int16_t textureIndex = -1; // texture selected earlier in the same event
+
+	bool IsMonitorLock() const { return y != 0; }
 };
 
 class Object
@@ -340,7 +383,7 @@ class Flat
 	public:
 	uint8_t data[128][128];
 	uint8_t palette[256][3];
-	void Load(const char* name);
+	bool Load(const char* name);
 	void DumpDebug(const char* name);
 };
 
@@ -348,7 +391,7 @@ class GloomMap
 {
 	public:
 		bool Load(const char* name, ObjectGraphics* nobj);
-		void SetFlat(char f);
+		bool SetFlat(int f);
 		void DumpDebug();
 		std::vector<Zone>& GetZones() { return zones; };
 		std::vector<Anim>& GetAnims() { return anims; };
@@ -360,11 +403,15 @@ class GloomMap
 		std::list<MapObject>& GetMapObjects() { return mapobjects; };
 		std::list<ActiveDoor>& GetActiveDoors() { return activedoors; };
 		std::list<Blood>& GetBlood() { return activeblood; };
+		std::list<BloodPool>& GetBloodPools() { return bloodpools; };
+		std::list<WallBloodSplat>& GetWallBloodSplats() { return wallbloodsplats; };
 		std::vector<ActiveRotPoly>& GetActiveRotPolys() { return activerotpolys; };
 		Column** GetTexPointers(){ return texturepointers;};
 		Column** GetTexPointersOrig(){ return texturepointersorig; };
+		bool ResolveTextureColumns(int textureIndex, std::vector<Column>*& outColumns, std::size_t& outBaseColumn);
 		std::vector<uint32_t>& GetCollisions(int zt, int x, int z) {return collisionpolys[zt][x][z];};
-		void ExecuteEvent(uint32_t e, bool& gotele, Teleport& teleout, bool allowTeleport = true);
+		void ExecuteEvent(uint32_t e, bool& gotele, Teleport& teleout, bool allowTeleport = true,
+			EventExecutionMode mode = EventExecutionMode::Normal);
 		GloomMap() { hasflat = false; };
 
 	private:
@@ -392,6 +439,8 @@ class GloomMap
 		std::list<MapObject> mapobjects;
 		std::vector<ActiveRotPoly> activerotpolys;
 		std::list<Blood> activeblood;
+		std::list<BloodPool> bloodpools;
+		std::list<WallBloodSplat> wallbloodsplats;
 
 		// texture pointers, used for remapping anims. 160 = 20 * 8;
 		Column* texturepointers[160];

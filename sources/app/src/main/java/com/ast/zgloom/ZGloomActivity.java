@@ -43,6 +43,7 @@ public class ZGloomActivity extends SDLActivity {
     private static final String ASSET_ROOT = "ZGloom";
     private static final String DATA_DIR_NAME = "ZGloom";
     private static final String DATA_INSTALL_MARKER = ".zgloom_data_v1";
+    private static final String DATA_UPDATE6A_MARKER = ".zgloom_update6a_g3dc";
     private static final int COPY_BUFFER_SIZE = 64 * 1024;
     private static final int TOTAL_GAME_DATA_FILES = 717;
 
@@ -86,6 +87,10 @@ public class ZGloomActivity extends SDLActivity {
         }
 
         if (isGameDataAlreadyInstalled()) {
+            // Update 6A replaces Zombie Massacre's g3-dc title overlay even on
+            // existing installations.  The normal first-install marker would
+            // otherwise leave the older asset in external storage forever.
+            installUpdate6AAssetsIfNeeded();
             mInstallFinished = true;
             startNativeThreadWithSelectorOverlay();
             return;
@@ -110,6 +115,7 @@ public class ZGloomActivity extends SDLActivity {
                 @Override
                 public void run() {
                     installGameDataIfNeeded();
+                    installUpdate6AAssetsIfNeeded();
                     mInstallFinished = true;
 
                     // Once done, remove the hint and start the native thread.
@@ -475,6 +481,45 @@ public class ZGloomActivity extends SDLActivity {
             }
         } catch (IOException e) {
             Log.e(TAG, "Error while installing ZGloom data from assets", e);
+        }
+    }
+
+
+    /**
+     * Install the small Update 6A data replacement on already initialized data
+     * folders.  This deliberately overwrites only Zombie Massacre's g3-dc and
+     * its palette; all user game data and configuration files remain untouched.
+     */
+    private void installUpdate6AAssetsIfNeeded() {
+        File ext = getExternalFilesDir(null);
+        if (ext == null) {
+            Log.w(TAG, "Update 6A: external files directory unavailable");
+            return;
+        }
+
+        File dataRoot = new File(ext, DATA_DIR_NAME);
+        File patchMarker = new File(dataRoot, DATA_UPDATE6A_MARKER);
+        if (patchMarker.exists()) {
+            return;
+        }
+
+        File massacrePixs = new File(new File(dataRoot, "massacre"), "pixs");
+        AssetManager am = getAssets();
+        try {
+            copyAssetFile(am, ASSET_ROOT + "/massacre/pixs/g3-dc",
+                    new File(massacrePixs, "g3-dc"));
+            copyAssetFile(am, ASSET_ROOT + "/massacre/pixs/g3-dc.pal",
+                    new File(massacrePixs, "g3-dc.pal"));
+
+            if (!dataRoot.exists() && !dataRoot.mkdirs()) {
+                Log.w(TAG, "Update 6A: failed to create data root for marker");
+            }
+            if (!patchMarker.exists() && !patchMarker.createNewFile()) {
+                Log.w(TAG, "Update 6A: patch marker was not created");
+            }
+            Log.i(TAG, "Update 6A: Zombie Massacre g3-dc assets installed");
+        } catch (IOException e) {
+            Log.e(TAG, "Update 6A: failed to install Zombie Massacre g3-dc assets", e);
         }
     }
 

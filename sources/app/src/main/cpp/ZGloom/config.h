@@ -43,8 +43,18 @@ namespace Config
 	void SetFocalLength(int32_t fl);
 	int GetMouseSens();
 	void SetMouseSens(int sens);
+	// Blood presentation mode used by EFFECTS OPTIONS:
+	// 0 = OFF, 1 = SPLATTER (legacy particle size 2),
+	// 2 = MASSACRE (same particles plus persistent floor pools).
+	int GetBloodMode();
+	void SetBloodMode(int mode);
+	int GetBloodParticleSize();
+	bool BloodPoolsEnabled();
+
+	// Compatibility accessors retained for older shared code.  They expose the
+	// effective flying-particle size, not the menu mode.
 	int GetBlood();
-	void SetBlood(int b);
+	void SetBlood(int legacySize);
 	int GetBlobShadows();
 	void SetBlobShadows(int on);
 	int GetDustEnabled();
@@ -79,6 +89,8 @@ namespace Config
 	bool GetControllerFire();
 	bool GetControllerDown();
 	bool GetControllerUp();
+	bool GetControllerLeft();
+	bool GetControllerRight();
 	bool GetControllerRun();
 	bool GetControllerStart();
 	bool GetControllerBack();
@@ -102,6 +114,9 @@ namespace Config
 
 	void Init();
 	void Save();
+
+int GetReflections();
+void SetReflections(int mode);
 
 void SetDataRoot(const std::string& root);
 const std::string& GetDataRoot();

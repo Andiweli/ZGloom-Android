@@ -12,6 +12,7 @@ namespace Config {
     int  GetScanlines();          void SetScanlines(int);
     int  GetScanlineIntensity();  void SetScanlineIntensity(int);  // 0..4
     int  GetMuzzleFlash();       void SetMuzzleFlash(int);      // 0/1
+    int  GetReflections();       void SetReflections(int);      // 0=OFF, 1=OBJECTS, 2=ALL
 
     // Optional: call once on startup; otherwise lazy-load happens on first access.
     void EffectsConfigInit();

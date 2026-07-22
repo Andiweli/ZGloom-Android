@@ -6,7 +6,6 @@
 #ifdef __ANDROID__
 #include <sdl2/SDL_system.h>
 #include <jni.h>
-#include <unistd.h>
 #include <errno.h>
 #endif
 #include "xmp/include/xmp.h"
@@ -38,10 +37,12 @@ static xmp_context g_xmp = nullptr;
 #ifndef _WIN32
 #include <dirent.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 #include "assets/launcher_bg_4_3_embed.h"
 #include "assets/launcher_bg_16_9_embed.h"
+#include "assets/gloom_classic_title_fallback_embed.h"
 
 #include "gamelogic.h"
 #include "soundhandler.h"
@@ -194,6 +195,107 @@ static bool GL_LoadEmbeddedCrm2(const unsigned char* src, unsigned int srcSize, 
 	std::memcpy(out.data, src, srcSize);
 	out.size = srcSize;
 	return true;
+}
+
+static bool GL_DecodeEmbeddedPic(const std::uint8_t* src,
+                                 std::size_t srcSize,
+                                 std::vector<std::uint8_t>& pic,
+                                 std::uint32_t& width)
+{
+    CrmFile picfile;
+    if (!GL_LoadEmbeddedCrm2(src, static_cast<unsigned int>(srcSize), picfile) ||
+        !picfile.data || picfile.size < 12)
+    {
+        return false;
+    }
+
+    IffHandler::DecodeIff(picfile.data, pic, width);
+    return width > 0 && !pic.empty();
+}
+
+static bool GL_ApplyPaletteData(const std::uint8_t* data,
+                                std::uint32_t size,
+                                SDL_Surface* render8)
+{
+    if (!data || size == 0 || !render8 || !render8->format ||
+        !render8->format->palette)
+    {
+        return false;
+    }
+
+    const std::uint32_t numColours = std::min<std::uint32_t>(256, size / 4);
+    if (numColours == 0)
+    {
+        return false;
+    }
+
+    for (std::uint32_t c = 0; c < numColours; ++c)
+    {
+        SDL_Color col;
+        col.a = 0xFF;
+        col.r = data[c * 4 + 0] & 0x0F;
+        col.g = data[c * 4 + 1] >> 4;
+        col.b = data[c * 4 + 1] & 0x0F;
+
+        col.r <<= 4;
+        col.g <<= 4;
+        col.b <<= 4;
+
+        col.r |= data[c * 4 + 2] & 0x0F;
+        col.g |= data[c * 4 + 3] >> 4;
+        col.b |= data[c * 4 + 3] & 0x0F;
+
+        SDL_SetPaletteColors(render8->format->palette, &col, c, 1);
+    }
+
+    return true;
+}
+
+static bool GL_ApplyEmbeddedPalette(const std::uint8_t* src,
+                                    std::size_t srcSize,
+                                    SDL_Surface* render8)
+{
+    CrmFile palfile;
+    if (!GL_LoadEmbeddedCrm2(src, static_cast<unsigned int>(srcSize), palfile) ||
+        !palfile.data || palfile.size == 0)
+    {
+        return false;
+    }
+
+    return GL_ApplyPaletteData(palfile.data, palfile.size, render8);
+}
+
+static bool GL_CopyDecodedPicToSurface(const std::vector<std::uint8_t>& pic,
+                                       std::uint32_t width,
+                                       SDL_Surface* render8,
+                                       int dstY = 0,
+                                       bool clearSurface = true)
+{
+    if (!render8 || width == 0 || pic.empty() || dstY >= render8->h)
+    {
+        return false;
+    }
+
+    if (clearSurface)
+    {
+        SDL_FillRect(render8, nullptr, 0);
+    }
+
+    const std::uint32_t height = static_cast<std::uint32_t>(pic.size() / width);
+    const std::uint32_t copyW = std::min<std::uint32_t>(width,
+        static_cast<std::uint32_t>(render8->w));
+    const std::uint32_t copyH = std::min<std::uint32_t>(height,
+        static_cast<std::uint32_t>(std::max(0, render8->h - dstY)));
+
+    for (std::uint32_t y = 0; y < copyH; ++y)
+    {
+        const std::uint8_t* src = pic.data() + y * width;
+        std::uint8_t* dst = static_cast<std::uint8_t*>(render8->pixels) +
+            (dstY + static_cast<int>(y)) * render8->pitch;
+        std::copy(src, src + copyW, dst);
+    }
+
+    return true;
 }
 
 
@@ -364,11 +466,6 @@ static bool DecodePicFile(const std::string& name, std::vector<uint8_t>& pic, ui
 
 static bool ApplyPicPalette(const std::string& name, SDL_Surface* render8)
 {
-	if (!render8 || !render8->format || !render8->format->palette)
-	{
-		return false;
-	}
-
 	CrmFile palfile;
 	if (!palfile.Load((name + ".pal").c_str()) || !palfile.data || palfile.size == 0)
 	{
@@ -376,28 +473,7 @@ static bool ApplyPicPalette(const std::string& name, SDL_Surface* render8)
 		return false;
 	}
 
-	// Gloom palette format: Amiga-style 12-bit RGB high nibbles plus low nibbles.
-	const uint32_t numColours = std::min<uint32_t>(256, palfile.size / 4);
-	for (uint32_t c = 0; c < numColours; c++)
-	{
-		SDL_Color col;
-		col.a = 0xFF;
-		col.r = palfile.data[c * 4 + 0] & 0xf;
-		col.g = palfile.data[c * 4 + 1] >> 4;
-		col.b = palfile.data[c * 4 + 1] & 0xF;
-
-		col.r <<= 4;
-		col.g <<= 4;
-		col.b <<= 4;
-
-		col.r |= palfile.data[c * 4 + 2] & 0xf;
-		col.g |= palfile.data[c * 4 + 3] >> 4;
-		col.b |= palfile.data[c * 4 + 3] & 0xF;
-
-		SDL_SetPaletteColors(render8->format->palette, &col, c, 1);
-	}
-
-	return true;
+	return GL_ApplyPaletteData(palfile.data, palfile.size, render8);
 }
 
 bool LoadPic(std::string name, SDL_Surface* render8)
@@ -416,20 +492,55 @@ bool LoadPic(std::string name, SDL_Surface* render8)
 	}
 
 	ApplyPicPalette(name, render8);
-	SDL_FillRect(render8, nullptr, 0);
+	return GL_CopyDecodedPicToSurface(pic, width, render8);
+}
 
-	const uint32_t height = width ? (uint32_t)(pic.size() / width) : 0;
-	const uint32_t copyW = std::min<uint32_t>(width, (uint32_t)render8->w);
-	const uint32_t copyH = std::min<uint32_t>(height, (uint32_t)render8->h);
+static bool GL_LoadPicWithEmbeddedFallback(const std::string& name,
+                                           SDL_Surface* render8,
+                                           const std::uint8_t* embeddedPic,
+                                           std::size_t embeddedPicSize,
+                                           const std::uint8_t* embeddedPalette,
+                                           std::size_t embeddedPaletteSize)
+{
+    if (!render8)
+    {
+        return false;
+    }
 
-	for (uint32_t y = 0; y < copyH; y++)
-	{
-		const uint8_t* src = pic.data() + y * width;
-		uint8_t* dst = (uint8_t*)render8->pixels + y * render8->pitch;
-		std::copy(src, src + copyW, dst);
-	}
+    std::vector<std::uint8_t> pic;
+    std::uint32_t width = 0;
+    const bool loadedFromDisk = DecodePicFile(name, pic, width);
 
-	return true;
+    if (!loadedFromDisk &&
+        !GL_DecodeEmbeddedPic(embeddedPic, embeddedPicSize, pic, width))
+    {
+        SDL_FillRect(render8, nullptr, 0);
+        SDL_Log("ZGloom: embedded fallback for '%s' also failed", name.c_str());
+        return false;
+    }
+
+    bool paletteLoaded = false;
+    if (loadedFromDisk)
+    {
+        paletteLoaded = ApplyPicPalette(name, render8);
+    }
+    if (!paletteLoaded)
+    {
+        paletteLoaded = GL_ApplyEmbeddedPalette(embeddedPalette,
+                                                embeddedPaletteSize,
+                                                render8);
+        if (paletteLoaded)
+        {
+            SDL_Log("ZGloom: using embedded palette fallback for '%s'", name.c_str());
+        }
+    }
+
+    if (!loadedFromDisk)
+    {
+        SDL_Log("ZGloom: using embedded picture fallback for '%s'", name.c_str());
+    }
+
+    return GL_CopyDecodedPicToSurface(pic, width, render8);
 }
 
 static bool OverlayPicAt(const std::string& name, SDL_Surface* render8, int dstY)
@@ -446,19 +557,137 @@ static bool OverlayPicAt(const std::string& name, SDL_Surface* render8, int dstY
 		return false;
 	}
 
-	const uint32_t height = width ? (uint32_t)(pic.size() / width) : 0;
-	const uint32_t copyW = std::min<uint32_t>(width, (uint32_t)render8->w);
-	const uint32_t copyH = std::min<uint32_t>(height, (uint32_t)std::max(0, render8->h - dstY));
-
-	for (uint32_t y = 0; y < copyH; y++)
-	{
-		const uint8_t* src = pic.data() + y * width;
-		uint8_t* dst = (uint8_t*)render8->pixels + (dstY + y) * render8->pitch;
-		std::copy(src, src + copyW, dst);
-	}
-
-	return true;
+	return GL_CopyDecodedPicToSurface(pic, width, render8, dstY, false);
 }
+
+static bool GL_OverlayEmbeddedPicAt(const std::uint8_t* embeddedPic,
+                                    std::size_t embeddedPicSize,
+                                    SDL_Surface* render8,
+                                    int dstY)
+{
+    std::vector<std::uint8_t> pic;
+    std::uint32_t width = 0;
+    if (!GL_DecodeEmbeddedPic(embeddedPic, embeddedPicSize, pic, width))
+    {
+        return false;
+    }
+
+    return GL_CopyDecodedPicToSurface(pic, width, render8, dstY, false);
+}
+
+// Present a 320-pixel static screen in widescreen using the same principle as
+// gloom2.s c87w1: keep the original picture untouched in the centre and extend
+// only the first/last pixel of each scanline into a four-step dark edge wash.
+// This avoids the visibly smeared 16-pixel side strips used by older Android
+// builds and never stretches menu/intermission text into the side areas.
+static void GL_BlitStaticWideLikeGloom2(SDL_Surface* source32,
+                                        SDL_Surface* destination32,
+                                        const SDL_Rect& centre)
+{
+    if (!source32 || !destination32 ||
+        source32->format->BytesPerPixel != 4 || destination32->format->BytesPerPixel != 4)
+    {
+        if (source32 && destination32)
+            SDL_BlitScaled(source32, nullptr, destination32, const_cast<SDL_Rect*>(&centre));
+        return;
+    }
+
+    const int leftWidth = std::max(0, centre.x);
+    const int rightStart = centre.x + centre.w;
+    const int rightWidth = std::max(0, destination32->w - rightStart);
+
+    if (SDL_MUSTLOCK(source32) && SDL_LockSurface(source32) != 0)
+        return;
+    if (SDL_MUSTLOCK(destination32) && SDL_LockSurface(destination32) != 0)
+    {
+        if (SDL_MUSTLOCK(source32)) SDL_UnlockSurface(source32);
+        return;
+    }
+
+    for (int dy = 0; dy < centre.h; ++dy)
+    {
+        const int dstY = centre.y + dy;
+        if (dstY < 0 || dstY >= destination32->h)
+            continue;
+
+        const int srcY = std::min(source32->h - 1,
+                                  std::max(0, (dy * source32->h) / std::max(1, centre.h)));
+        const uint32_t* srcRow = reinterpret_cast<const uint32_t*>(
+            static_cast<const uint8_t*>(source32->pixels) + srcY * source32->pitch);
+        uint32_t* dstRow = reinterpret_cast<uint32_t*>(
+            static_cast<uint8_t*>(destination32->pixels) + dstY * destination32->pitch);
+
+        Uint8 lr = 0, lg = 0, lb = 0, la = 255;
+        Uint8 rr = 0, rg = 0, rb = 0, ra = 255;
+        SDL_GetRGBA(srcRow[0], source32->format, &lr, &lg, &lb, &la);
+        SDL_GetRGBA(srcRow[source32->w - 1], source32->format, &rr, &rg, &rb, &ra);
+
+        uint32_t leftShades[4];
+        uint32_t rightShades[4];
+        for (int shade = 0; shade < 4; ++shade)
+        {
+            const int numerator = shade + 1; // quarter, half, three-quarter, full
+            leftShades[shade] = SDL_MapRGBA(destination32->format,
+                static_cast<Uint8>((static_cast<int>(lr) * numerator) / 4),
+                static_cast<Uint8>((static_cast<int>(lg) * numerator) / 4),
+                static_cast<Uint8>((static_cast<int>(lb) * numerator) / 4), 255);
+            rightShades[shade] = SDL_MapRGBA(destination32->format,
+                static_cast<Uint8>((static_cast<int>(rr) * numerator) / 4),
+                static_cast<Uint8>((static_cast<int>(rg) * numerator) / 4),
+                static_cast<Uint8>((static_cast<int>(rb) * numerator) / 4), 255);
+        }
+
+        for (int x = 0; x < leftWidth; ++x)
+        {
+            const int shade = std::min(3, (x * 4) / std::max(1, leftWidth));
+            dstRow[x] = leftShades[shade];
+        }
+        for (int x = 0; x < rightWidth; ++x)
+        {
+            const int shade = std::min(3,
+                ((rightWidth - 1 - x) * 4) / std::max(1, rightWidth));
+            dstRow[rightStart + x] = rightShades[shade];
+        }
+    }
+
+    if (SDL_MUSTLOCK(destination32)) SDL_UnlockSurface(destination32);
+    if (SDL_MUSTLOCK(source32)) SDL_UnlockSurface(source32);
+
+    SDL_BlitScaled(source32, nullptr, destination32, const_cast<SDL_Rect*>(&centre));
+}
+
+// Gloom Classic deliberately uses a coarser software look.  The world is still
+// rendered normally for compatibility, then reduced to stable nearest-neighbour
+// 2x2 blocks before the separate HUD layer is composed.  Menus never pass here.
+static void GL_PixelateWorld2x2(SDL_Surface* surface)
+{
+    if (!surface || surface->format->BytesPerPixel != 4)
+        return;
+
+    if (SDL_MUSTLOCK(surface) && SDL_LockSurface(surface) != 0)
+        return;
+
+    for (int y = 0; y < surface->h; y += 2)
+    {
+        uint32_t* row0 = reinterpret_cast<uint32_t*>(
+            static_cast<uint8_t*>(surface->pixels) + y * surface->pitch);
+        uint32_t* row1 = (y + 1 < surface->h)
+            ? reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(surface->pixels) + (y + 1) * surface->pitch)
+            : row0;
+
+        for (int x = 0; x < surface->w; x += 2)
+        {
+            const uint32_t pixel = row0[x];
+            row0[x] = pixel;
+            if (x + 1 < surface->w) row0[x + 1] = pixel;
+            row1[x] = pixel;
+            if (x + 1 < surface->w) row1[x + 1] = pixel;
+        }
+    }
+
+    if (SDL_MUSTLOCK(surface)) SDL_UnlockSurface(surface);
+}
+
 
 enum GameState
 {
@@ -1077,6 +1306,8 @@ int main(int argc, char* argv[])
 #endif
 
 	bool selectedGloom3 = false;
+	bool selectedZombieMassacre = false;
+	bool selectedGloomClassic = false;
 	GameInstall chosenInstall;
 	bool haveChosenInstall = false;
 
@@ -1091,6 +1322,7 @@ int main(int argc, char* argv[])
 		{
 			fclose(file);
 			Config::SetZM(true);
+			selectedZombieMassacre = true;
 		}
 	}
 	else
@@ -1123,6 +1355,14 @@ int main(int argc, char* argv[])
 		}
 
 		selectedGloom3 = (chosen.label == "Gloom 3") || GL_IsGloom3Name(chosen.baseDir);
+		selectedZombieMassacre = chosen.isZM || (chosen.label == "Zombie Massacre");
+		const std::string compactChosenName = GL_CompactGameName(chosen.baseDir);
+		const bool explicitClassicName = (chosen.label == "Gloom Classic" ||
+			compactChosenName == "gloom" || compactChosenName == "gloomclassic");
+		const bool rootClassicFallback = chosen.baseDir.empty() && chosen.label == "Gloom" &&
+			!GL_FileExistsIn(chosen.baseDir, "pics/title");
+		selectedGloomClassic = !selectedZombieMassacre && !selectedGloom3 &&
+			(explicitClassicName || rootClassicFallback);
 
 #ifdef __ANDROID__
 		// Refine DataRoot to chosen subfolder and chdir there
@@ -1273,6 +1513,8 @@ int main(int argc, char* argv[])
 	SDL_Surface* splashbitmap = SDL_CreateRGBSurface(0, 320, 256, 8, 0, 0, 0, 0);
 	SDL_Surface* render32 = SDL_CreateRGBSurface(0, renderwidth, renderheight, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
 	SDL_Surface* screen32 = SDL_CreateRGBSurface(0, 320, 256, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
+	SDL_Surface* zmTitleOverlay8 = nullptr;
+	SDL_Surface* zmTitleOverlay32 = nullptr;
 
 
 	SDL_Log("ZGloom: Surfaces created (render8/intermission/title/render32/screen32)");
@@ -1325,7 +1567,15 @@ int main(int argc, char* argv[])
 
 	SDL_Log("ZGloom: loading original-style title flow pictures");
 	const bool haveSplash = LoadPic(Config::GetPicsDir() + "blackmagic", splashbitmap);
-	const bool haveTitle = LoadPic(Config::GetPicsDir() + "title", titlebitmap);
+	const bool haveTitle = selectedGloomClassic
+		? GL_LoadPicWithEmbeddedFallback(
+			Config::GetPicsDir() + "title",
+			titlebitmap,
+			kEmbeddedGloomClassicTitleCrm2,
+			kEmbeddedGloomClassicTitleCrm2Size,
+			kEmbeddedGloomClassicTitlePal,
+			kEmbeddedGloomClassicTitlePalSize)
+		: LoadPic(Config::GetPicsDir() + "title", titlebitmap);
 
 	if (haveTitle)
 	{
@@ -1334,14 +1584,44 @@ int main(int argc, char* argv[])
 
 		// Gloom 3 already has the complete title artwork in pics/title.
 		// Do not draw pics/gloom or pics/gloombrush over it.
-		const bool suppressTitleLogoOverlay = selectedGloom3 || GL_IsGloom3Name(Config::GetDataRoot());
+		const bool suppressTitleLogoOverlay = selectedGloom3 || selectedZombieMassacre ||
+			GL_IsGloom3Name(Config::GetDataRoot());
 		if (!suppressTitleLogoOverlay)
 		{
-			// Retail Gloom/Gloom Deluxe data uses pics/gloom for the logo overlay.
-			// Keep gloombrush as a fallback for older/private data sets.
-			if (!OverlayPicAt(Config::GetPicsDir() + "gloom", titlemenubitmap, 168))
+			if (selectedGloomClassic)
 			{
-				OverlayPicAt(Config::GetPicsDir() + "gloombrush", titlemenubitmap, 168);
+				// Gloom Classic uses the brush artwork from the original start flow.
+				// Keep the plain titlebitmap untouched so ABOUT can hide the brush,
+				// while titlemenubitmap restores it automatically on return to MAIN.
+				if (OverlayPicAt(Config::GetPicsDir() + "gloombrush", titlemenubitmap, 168))
+				{
+					SDL_Log("ZGloom: Gloom Classic gloombrush title overlay loaded at y=168");
+				}
+				else if (OverlayPicAt(Config::GetPicsDir() + "gloom", titlemenubitmap, 168))
+				{
+					SDL_Log("ZGloom: Gloom Classic gloom title overlay loaded at y=168");
+				}
+				else if (GL_OverlayEmbeddedPicAt(
+					kEmbeddedGloomClassicBrushCrm2,
+					kEmbeddedGloomClassicBrushCrm2Size,
+					titlemenubitmap,
+					168))
+				{
+					SDL_Log("ZGloom: using embedded Gloom Classic brush fallback at y=168");
+				}
+				else
+				{
+					SDL_Log("ZGloom: Gloom Classic title brush missing on disk and in embedded fallback");
+				}
+			}
+			else
+			{
+				// Gloom Deluxe and compatible data sets normally use pics/gloom.
+				// Keep gloombrush as a fallback for older/private data sets.
+				if (!OverlayPicAt(Config::GetPicsDir() + "gloom", titlemenubitmap, 168))
+				{
+					OverlayPicAt(Config::GetPicsDir() + "gloombrush", titlemenubitmap, 168);
+				}
 			}
 		}
 	}
@@ -1359,6 +1639,30 @@ int main(int argc, char* argv[])
 		SDL_FillRect(titlebitmap, nullptr, 0);
 		SDL_FillRect(titlemenubitmap, nullptr, 0);
 	}
+
+	// Zombie Massacre's g3-dc uses its own palette.  Keep it as a separate
+	// 32-bit overlay instead of copying its indices into the title palette.
+	// It is composed only on the main title menu, never on ABOUT.
+	if (selectedZombieMassacre)
+	{
+		zmTitleOverlay8 = SDL_CreateRGBSurface(0, 320, 70, 8, 0, 0, 0, 0);
+		if (zmTitleOverlay8 && LoadPic(Config::GetPicsDir() + "g3-dc", zmTitleOverlay8))
+		{
+			zmTitleOverlay32 = SDL_ConvertSurfaceFormat(zmTitleOverlay8, SDL_PIXELFORMAT_ARGB8888, 0);
+			if (zmTitleOverlay32)
+			{
+				SDL_SetSurfaceBlendMode(zmTitleOverlay32, SDL_BLENDMODE_NONE);
+				SDL_Log("ZGloom: Zombie Massacre g3-dc title overlay loaded at y=167");
+			}
+		}
+		else
+		{
+			SDL_Log("ZGloom: Zombie Massacre g3-dc title overlay missing");
+		}
+	}
+
+	if (selectedGloomClassic)
+		SDL_Log("ZGloom: Gloom Classic 2x2 world rendering enabled");
 
 	if (haveSplash && haveTitle)
 	{
@@ -1383,6 +1687,16 @@ int main(int argc, char* argv[])
 	}
 
 	std::string intermissiontext;
+	std::size_t intermissionTypewriterTotal = 0;
+	uint32_t intermissionTypewriterStartTicks = 0;
+	bool intermissionTypewriterComplete = true;
+	const uint32_t intermissionTypewriterCharacterMs = 40;
+
+	// RESUME SAVED POSITION must not show the first script intermission.  We
+	// still parse the opening picture/song/tile commands so the normal level
+	// context is available, but suppress visible drawing, music and WAIT.
+	bool skipIntermissionForResume = false;
+	bool intermissionPictureValid = false;
 
 	bool intermissionmusplaying = false;
 	bool haveingamemusic = false;
@@ -1407,9 +1721,8 @@ int main(int argc, char* argv[])
 	
 	//set up the level select
 
-	std::vector<std::string> levelnames;
-	script.GetLevelNames(levelnames);
-	titlescreen.SetLevels(levelnames);
+	const std::vector<LevelDescriptor>& levelcatalog = script.GetLevels();
+	titlescreen.SetLevels(levelcatalog);
 	int levelselect = 0;
 
 	SDL_Log("ZGloom: entering main loop");
@@ -1430,9 +1743,20 @@ int main(int argc, char* argv[])
 			{
 				case Script::SOP_SETPICT:
 				{
+					// RESUME suppresses the visible intermission, not its resources.
+					// Original scripts often set pict_ only once for an entire episode.
 					scriptstring.insert(0, Config::GetPicsDir());
-					LoadPic(scriptstring, intermissionscreen);
-					SDL_SetPaletteColors(render8->format->palette, intermissionscreen->format->palette->colors, 0, 256);
+					intermissionPictureValid = LoadPic(scriptstring, intermissionscreen);
+					if (intermissionPictureValid)
+					{
+						SDL_SetPaletteColors(render8->format->palette,
+							intermissionscreen->format->palette->colors, 0, 256);
+					}
+					else
+					{
+						SDL_Log("ZGloom: failed to prepare intermission picture '%s'",
+							scriptstring.c_str());
+					}
 					break;
 				}
 				case Script::SOP_SONG:
@@ -1444,10 +1768,20 @@ int main(int argc, char* argv[])
 				}
 				case Script::SOP_LOADFLAT:
 				{
-					//improve this, only supports 9 flats
-					int flat = scriptstring[0] - '0';
-					gmap.SetFlat(flat);
-					SaveSystem::SetCurrentFlat(flat);
+					char* end = nullptr;
+					const long parsedFlat = std::strtol(scriptstring.c_str(), &end, 10);
+					while (end && *end && std::isspace(static_cast<unsigned char>(*end)))
+						++end;
+
+					if (end != scriptstring.c_str() && end && *end == '\0' && parsedFlat >= 0 && parsedFlat <= 999)
+					{
+						if (!gmap.SetFlat(static_cast<int>(parsedFlat)))
+							SDL_Log("ZGloom SaveSystem: failed to load floor/roof set %ld", parsedFlat);
+					}
+					else
+					{
+						SDL_Log("ZGloom SaveSystem: invalid flat token '%s'", scriptstring.c_str());
+					}
 					break;
 				}
 				case Script::SOP_LOADMAP:
@@ -1456,37 +1790,12 @@ int main(int argc, char* argv[])
 					break;
 				case Script::SOP_TEXT:
 				{
-					 intermissiontext = scriptstring;
-
-					 if (state == STATE_SPOOLING)
-					 {
-						 if (intermissiontext == levelnames[levelselect])
-						 {
-							 // level selector
-							 if (intermissionmusic.data)
-							 {
-								 if (xmp_load_module_from_memory(g_xmp, intermissionmusic.data, intermissionmusic.size))
-								 {
-									 std::cout << "music error";
-								 }
-
-								 if (xmp_start_player(g_xmp, 22050, 0))
-								 {
-									 std::cout << "music error";
-								 }
-								 Mix_HookMusic(fill_audio, g_xmp);
-								 Config::SetMusicVol(Config::GetMusicVol());
-								 intermissionmusplaying = true;
-							 }
-
-							 state = STATE_PARSING;
-						 }
-					 }
-					 break;
+					intermissiontext = scriptstring;
+					break;
 				}
 				case Script::SOP_DRAW:
 				{
-					if (state == STATE_PARSING)
+					if (state == STATE_PARSING && !skipIntermissionForResume)
 					{
 						if (intermissionmusic.data)
 						{
@@ -1510,11 +1819,24 @@ int main(int argc, char* argv[])
 				{
 					if (state == STATE_PARSING)
 					{
+						if (skipIntermissionForResume && g_RequestTitleContinue)
+						{
+							// Continue parsing immediately.  The first PLAY command will
+							// replace its map with the saved one and seek the script to
+							// the command following that saved level's PLAY entry.
+							intermissiontext.clear();
+							intermissionTypewriterTotal = 0;
+							intermissionTypewriterComplete = true;
+							break;
+						}
+
 						state = STATE_WAITING;
+						intermissionTypewriterTotal = smallfont.CountTypewriterCharacters(intermissiontext);
+						intermissionTypewriterStartTicks = SDL_GetTicks();
+						intermissionTypewriterComplete = (intermissionTypewriterTotal == 0);
 
 						SDL_SetPaletteColors(render8->format->palette, smallfont.GetPalette()->colors, 0, 16);
 						SDL_BlitSurface(intermissionscreen, NULL, render8, NULL);
-						smallfont.PrintMultiLineMessage(intermissiontext, 220, render8);
 					}
 					break;
 				}
@@ -1535,16 +1857,42 @@ int main(int argc, char* argv[])
 					if (g_RequestTitleContinue)
 					{
 						g_RequestTitleContinue = false;
+						skipIntermissionForResume = false;
 						if (SaveSystem::LoadFromDisk(s))
 						{
-							levelRel    = s.levelPath;
+							levelRel     = s.levelPath;
 							haveSavePos = true;
-							SaveSystem::SetCurrentFlat(s.flatIndex);
+
+							// V1 stored only the first digit of tile_10, tile_11, etc.
+							// Recover the canonical flat from the script when migrating an
+							// older save, or when a save has no valid flat index.
+							int scriptedFlat = -1;
+							if (script.GetFlatForLevel(levelRel, scriptedFlat))
+							{
+								if (s.formatVersion == 1 || s.flatIndex < 0)
+								{
+									s.flatIndex = scriptedFlat;
+								}
+								else if (s.flatIndex != scriptedFlat)
+								{
+									SDL_Log("ZGloom SaveSystem: saved flat %d differs from script flat %d for %s",
+										s.flatIndex, scriptedFlat, levelRel.c_str());
+								}
+							}
+
 							script.SeekAfterPlayFor(levelRel);
 
-							// EventReplay: load stored event history for this save
-							if (EventReplay::LoadFromDisk())
+							// V2 keeps the event history in savepos.txt.  V1 falls back
+							// to the legacy last.events sidecar for compatibility.
+							if (s.formatVersion >= 2)
+							{
+								EventReplay::SetEvents(s.eventHistory);
+								haveReplay = !EventReplay::GetEvents().empty();
+							}
+							else if (EventReplay::LoadFromDisk())
+							{
 								haveReplay = true;
+							}
 						}
 					}
 
@@ -1561,14 +1909,34 @@ int main(int argc, char* argv[])
 					std::string levelFull = levelRel;
 					levelFull.insert(0, Config::GetLevelDir());
 					gmap.Load(levelFull.c_str(), &objgraphics);
-					//gmap.Load("maps/map1_4", &objgraphics);
+
+					// The script has normally loaded episode 1's flat before reaching
+					// the first PLAY command.  A continued game must explicitly reload
+					// the floor/roof pair stored with its own episode before renderer init.
+					if (haveSavePos && s.flatIndex >= 0)
+					{
+						if (!gmap.SetFlat(s.flatIndex))
+						{
+							SDL_Log("ZGloom SaveSystem: failed to restore floor/roof set %d for %s",
+								s.flatIndex,
+								levelRel.c_str());
+						}
+					}
+
+					// Restore the shared life reserve before level initialisation.  Old V1/V2
+					// saves have no LIVES line and therefore retain SaveData's default of 3.
+					if (haveSavePos)
+						logic.SetLives(s.lives);
+
 					renderer.Init(render32, &gmap, &objgraphics);
 					logic.InitLevel(&gmap, &cam, &objgraphics);
 
-					// EventReplay: after the map is fully initialised, restore button/door state
+					// Restore only durable world state.  The replay path deliberately
+					// suppresses teleports, sounds and a second monster spawn.
 					if (haveReplay)
 					{
 						EventReplay::ReplayAll(gmap);
+						logic.RestoreTriggeredEvents(EventReplay::GetEvents());
 					}
 
 					// If we continue from a save, restore camera and player state
@@ -1663,6 +2031,32 @@ int main(int argc, char* argv[])
 			SDL_SetPaletteColors(render8->format->palette, titleSource->format->palette->colors, 0, 256);
 			titlescreen.Render(titleSource, render8, smallfont);
 		}
+		else if (state == STATE_WAITING)
+		{
+			// Always restore the full intermission palette after gameplay/title
+			// rendering, then reserve entries 0..15 for the small font.
+			if (intermissionPictureValid)
+			{
+				SDL_SetPaletteColors(render8->format->palette,
+					intermissionscreen->format->palette->colors, 0, 256);
+			}
+			SDL_SetPaletteColors(render8->format->palette, smallfont.GetPalette()->colors, 0, 16);
+			SDL_BlitSurface(intermissionscreen, NULL, render8, NULL);
+
+			std::size_t visibleCharacters = intermissionTypewriterTotal;
+			if (!intermissionTypewriterComplete)
+			{
+				const uint32_t elapsed = SDL_GetTicks() - intermissionTypewriterStartTicks;
+				visibleCharacters = std::min<std::size_t>(
+					intermissionTypewriterTotal,
+					static_cast<std::size_t>(elapsed / intermissionTypewriterCharacterMs) + 1);
+				if (visibleCharacters >= intermissionTypewriterTotal)
+					intermissionTypewriterComplete = true;
+			}
+
+			smallfont.PrintMultiLineMessageProgressive(
+				intermissiontext, 220, render8, visibleCharacters);
+		}
 
 		while ((state!= STATE_SPOOLING) && SDL_PollEvent(&sEvent))
 		{
@@ -1703,17 +2097,22 @@ int main(int argc, char* argv[])
 						sEvent.type = SDL_KEYDOWN;
 						sEvent.key.keysym.sym = SDLK_DOWN;
 					}
-					// Back one level in menus -> ESC
+					// Numeric and multi-choice values are adjusted exclusively with DPAD.
+					if (state == STATE_MENU && Config::GetControllerLeft())
+					{
+						sEvent.type = SDL_KEYDOWN;
+						sEvent.key.keysym.sym = SDLK_LEFT;
+					}
+					if (state == STATE_MENU && Config::GetControllerRight())
+					{
+						sEvent.type = SDL_KEYDOWN;
+						sEvent.key.keysym.sym = SDLK_RIGHT;
+					}
+					// B / BACK returns one submenu level; from MAIN it closes the menu.
 					if (Config::GetControllerBack())
 					{
 						sEvent.type = SDL_KEYDOWN;
 						sEvent.key.keysym.sym = SDLK_ESCAPE;
-					}
-					// Decrement current option in menu (U / X / Square) -> LEFT
-					if (state == STATE_MENU && Config::GetControllerMap())
-					{
-						sEvent.type = SDL_KEYDOWN;
-						sEvent.key.keysym.sym = SDLK_LEFT;
 					}
 				}
 
@@ -1750,13 +2149,22 @@ int main(int argc, char* argv[])
 			{
 				if (state == STATE_WAITING)
 				{
-					state = STATE_PARSING;
-					if (intermissionmusic.data)
+					if (!intermissionTypewriterComplete)
 					{
-						Mix_HookMusic(nullptr, nullptr);
-						xmp_end_player(g_xmp);
-						xmp_release_module(g_xmp);
-						intermissionmusplaying = false;
+						// First press while text is still typing reveals the complete
+						// message.  A second press continues to the level.
+						intermissionTypewriterComplete = true;
+					}
+					else
+					{
+						state = STATE_PARSING;
+						if (intermissionmusic.data)
+						{
+							Mix_HookMusic(nullptr, nullptr);
+							xmp_end_player(g_xmp);
+							xmp_release_module(g_xmp);
+							intermissionmusplaying = false;
+						}
 					}
 				}
 			}
@@ -1774,6 +2182,18 @@ int main(int argc, char* argv[])
 					switch (titlescreen.Update(sEvent, levelselect))
 					{
 						case TitleScreen::TITLERET_PLAY:
+							// A resume starts at the normal beginning of the script so
+							// global song/tile setup is parsed, but its first visual
+							// intermission block is suppressed.  SOP_PLAY then restores
+							// the saved map and advances to its correct script position.
+							skipIntermissionForResume = g_RequestTitleContinue;
+							if (skipIntermissionForResume)
+							{
+								script.Reset();
+								intermissiontext.clear();
+								SDL_Log("ZGloom SaveSystem: resume requested; skipping intermission");
+							}
+
 							state = STATE_PARSING;
 							BGM::Stop(); // ensure Atmosphere BGM is stopped on TITLERET_PLAY
 							logic.Init(&objgraphics);
@@ -1785,7 +2205,40 @@ int main(int argc, char* argv[])
 							}
 							break;
 						case TitleScreen::TITLERET_SELECT:
-							state = STATE_SPOOLING;
+						{
+							if (levelselect < 0 || levelselect >= static_cast<int>(levelcatalog.size()) ||
+								!script.SeekToLevel(static_cast<std::size_t>(levelselect)))
+							{
+								SDL_Log("ZGloom LevelSelect: invalid selection %d", levelselect);
+								break;
+							}
+
+							const LevelDescriptor& selectedLevel = levelcatalog[static_cast<std::size_t>(levelselect)];
+							g_RequestTitleContinue = false;
+							EventReplay::Clear();
+							intermissiontext.clear();
+
+							// Directly restore the selected level's script context.  The script
+							// resumes at that level's draw_ line, so its own intermission text
+							// is still shown without spooling through earlier descriptions.
+							if (!selectedLevel.pictureName.empty())
+							{
+								std::string picturePath = Config::GetPicsDir() + selectedLevel.pictureName;
+								intermissionPictureValid = LoadPic(picturePath, intermissionscreen);
+								if (intermissionPictureValid)
+								{
+									SDL_SetPaletteColors(render8->format->palette,
+										intermissionscreen->format->palette->colors, 0, 256);
+								}
+							}
+
+							if (selectedLevel.flatIndex >= 0 && !gmap.SetFlat(selectedLevel.flatIndex))
+							{
+								SDL_Log("ZGloom LevelSelect: failed to load flat %d for %s",
+									selectedLevel.flatIndex, selectedLevel.mapPath.c_str());
+							}
+
+							state = STATE_PARSING;
 							logic.Init(&objgraphics);
 							if (titlemusic.data)
 							{
@@ -1793,7 +2246,12 @@ int main(int argc, char* argv[])
 								xmp_end_player(g_xmp);
 								xmp_release_module(g_xmp);
 							}
+
+							SDL_Log("ZGloom LevelSelect: selected %s (flat=%d, script=%u)",
+								selectedLevel.mapPath.c_str(), selectedLevel.flatIndex,
+								selectedLevel.entryScriptLine);
 							break;
+						}
 						case TitleScreen::TITLERET_QUIT:
 							notdone = false;
 							break;
@@ -1808,6 +2266,11 @@ int main(int argc, char* argv[])
 					if (g_RequestSavePosition)
 					{
 						g_RequestSavePosition = false;
+						if (!logic.CanSavePosition())
+						{
+							SDL_Log("ZGloom SaveSystem: save ignored while Defender is active");
+							continue;
+						}
 						SaveSystem::SaveData s;
 						s.levelPath = SaveSystem::GetCurrentLevelPath();
 						s.flatIndex = SaveSystem::GetCurrentFlat();
@@ -1820,20 +2283,40 @@ int main(int argc, char* argv[])
 						MapObject player = logic.GetPlayerObj();
 
 						s.hp        = player.data.ms.hitpoints;
+						s.lives     = logic.GetLives();
 						s.weapon    = player.data.ms.weapon;
 						s.reload    = player.data.ms.reload;
 						s.reloadcnt = player.data.ms.reloadcnt;
 
-						SaveSystem::SaveToDisk(s);
-						EventReplay::SaveToDisk();
-						SDL_Log("ZGloom SaveSystem: SAVE requested (level=%s, weapon=%d, reload=%d)", s.levelPath.c_str(), s.weapon, s.reload);
+						s.eventHistory = EventReplay::GetEvents();
+
+						const bool saveOk = SaveSystem::SaveToDisk(s);
+						if (saveOk)
+						{
+							// Keep the legacy sidecar updated so the save can still be
+							// imported into older ZGLOOM builds during the transition.
+							EventReplay::SaveToDisk();
+							SDL_Log("ZGloom SaveSystem: V2 save written (level=%s, flat=%d, lives=%d, events=%lu)",
+								s.levelPath.c_str(),
+								s.flatIndex,
+								s.lives,
+								static_cast<unsigned long>(s.eventHistory.size()));
+						}
+						else
+						{
+							SDL_Log("ZGloom SaveSystem: SAVE failed for level=%s", s.levelPath.c_str());
+						}
 					}
 
 					switch (mr)
 					{
 						case MenuScreen::MENURET_PLAY:
 							state = STATE_PLAYING;
-							break;
+							// The same ESC event used by B/BACK to close the main menu
+							// reaches the generic PLAYING-state menu opener below.  Consume
+							// it here, otherwise the menu is closed and immediately reopened
+							// within the same SDL event cycle.
+							continue;
 						case MenuScreen::MENURET_QUIT:
 							script.Reset();
 							state = STATE_TITLE;
@@ -1882,7 +2365,39 @@ int main(int argc, char* argv[])
 			{
 				if (state == STATE_PLAYING)
 				{
-					if (logic.Update(&cam))
+					const bool levelFinished = logic.Update(&cam);
+
+					if (logic.ConsumeGameOverRequest())
+					{
+						// All lives are gone.  Leave the last Save Position untouched, reset
+						// script progress for START NEW GAME, and return to the title menu.
+						SDL_Log("ZGloom Lives: GAME OVER; returning to title menu");
+						script.Reset();
+						EventReplay::Clear();
+						g_RequestTitleContinue = false;
+						titlescreen.ResetToMain();
+						BGM::Stop();
+
+						if (haveingamemusic)
+						{
+							Mix_HookMusic(nullptr, nullptr);
+							xmp_end_player(g_xmp);
+							xmp_release_module(g_xmp);
+							intermissionmusplaying = false;
+						}
+
+						state = STATE_TITLE;
+						if (titlemusic.data)
+						{
+							if (xmp_load_module_from_memory(g_xmp, titlemusic.data, titlemusic.size))
+								std::cout << "music error";
+							if (xmp_start_player(g_xmp, 22050, 0))
+								std::cout << "music error";
+							Mix_HookMusic(fill_audio, g_xmp);
+							Config::SetMusicVol(Config::GetMusicVol());
+						}
+					}
+					else if (levelFinished)
 					{
 						BGM::Stop(); // stop Atmosphere BGM on level end
 						if (haveingamemusic)
@@ -1897,6 +2412,9 @@ int main(int argc, char* argv[])
 				}
 				if (state == STATE_TITLE)
 				{
+					const bool controllerUp = Config::HaveController() && Config::GetControllerUp();
+					const bool controllerDown = Config::HaveController() && Config::GetControllerDown();
+					titlescreen.UpdateControllerHold(controllerUp, controllerDown);
 					titlescreen.Clock();
 				}
 				if (state == STATE_MENU)
@@ -1929,13 +2447,20 @@ int main(int argc, char* argv[])
 			//cam.z.SetInt(5359);
 			//cam.rotquick.SetInt(254);
 			renderer.Render(&cam);
+			if (selectedGloomClassic)
+				GL_PixelateWorld2x2(render32);
 			MapObject pobj = logic.GetPlayerObj();
-			hud.Render(hudLayer32, pobj, smallfont);
+			hud.Render(hudLayer32, pobj, smallfont, logic.GetLives());
 			fps++;
 		}
 		if (state == STATE_MENU)
 		{
 			renderer.Render(&cam);
+			// Keep the paused Gloom Classic world at the same coarse 2x2
+			// resolution as active gameplay.  Apply this before drawing the
+			// menu so menu text and panels remain full-resolution and sharp.
+			if (selectedGloomClassic)
+				GL_PixelateWorld2x2(render32);
 			menuscreen.Render(render32, render32, smallfont);
 		}
 		
@@ -1943,6 +2468,15 @@ int main(int argc, char* argv[])
 		{
 			// SDL does not seem to like scaled 8->32 copy?
 			SDL_BlitSurface(render8, NULL, screen32, NULL);
+
+			// g3-dc belongs only to Zombie Massacre's main title menu.  ABOUT
+			// remains the clean title; returning to MAIN composes it again here.
+			if (state == STATE_TITLE && selectedZombieMassacre &&
+				!titlescreen.WantsPlainTitleBackground() && zmTitleOverlay32)
+			{
+				SDL_Rect overlayDst = { 0, 167, zmTitleOverlay32->w, zmTitleOverlay32->h };
+				SDL_BlitSurface(zmTitleOverlay32, nullptr, screen32, &overlayDst);
+			}
 
 			int aspect = Config::GetDisplayAspect();
 
@@ -1953,101 +2487,12 @@ int main(int argc, char* argv[])
 			}
 			else
 			{
-				// 16:9: 4:3-Bild zentriert, Seiten mit gestreckten und abgedunkelten Rändern
+				// 16:9 static presentation matching gloom2.s WIDE: keep the
+				// complete 320x256 title/intermission untouched in the centre and
+				// extend only each scanline's edge colour as a four-step dark wash.
+				// No image strip or text is horizontally stretched.
 				SDL_Rect center = blitrect;
-				SDL_Rect dst;
-
-				// Seitliche Leisten: nach Möglichkeit nur aus dem nackten Hintergrundbild erzeugen,
-				// damit Schrift am Rand nicht in die 16:9-Streifen mitgestretcht wird.
-				SDL_Surface* barSrc32 = screen32;   // Fallback: komplettes Bild
-				SDL_Surface* tmpBars  = NULL;
-
-				SDL_Surface* bg8 = NULL;
-				if (state == STATE_SPLASH)
-				{
-					bg8 = splashbitmap;
-				}
-				else if (state == STATE_TITLE)
-				{
-					bg8 = titlescreen.WantsPlainTitleBackground() ? titlebitmap : titlemenubitmap;
-				}
-				else if (state == STATE_WAITING)
-				{
-					bg8 = intermissionscreen;
-				}
-
-				if (bg8)
-				{
-					tmpBars = SDL_ConvertSurfaceFormat(bg8, SDL_PIXELFORMAT_ARGB8888, 0);
-					if (tmpBars)
-					{
-						barSrc32 = tmpBars;
-					}
-				}
-
-				// linke Leiste
-				int leftBarW = center.x;
-				if (leftBarW > 0)
-				{
-					SDL_Rect srcL;
-					srcL.x = 0;
-					srcL.y = 0;
-					srcL.w = 16;           // schmaler Streifen vom linken Rand
-					srcL.h = barSrc32->h;
-
-					dst.x = 0;
-					dst.y = center.y;
-					dst.w = leftBarW;
-					dst.h = center.h;
-
-					// gestreckter Rand
-					SDL_BlitScaled(barSrc32, &srcL, render32, &dst);
-
-					// abdunkeln mit halbtransparentem Schwarz
-					SDL_Surface* darkL = SDL_CreateRGBSurfaceWithFormat(0, dst.w, dst.h, 32, SDL_PIXELFORMAT_RGBA8888);
-					if (darkL)
-					{
-						SDL_FillRect(darkL, NULL, SDL_MapRGBA(darkL->format, 0, 0, 0, 160));
-						SDL_SetSurfaceBlendMode(darkL, SDL_BLENDMODE_BLEND);
-						SDL_BlitSurface(darkL, NULL, render32, &dst);
-						SDL_FreeSurface(darkL);
-					}
-				}
-
-				// rechte Leiste
-				int rightBarW = renderwidth - (center.x + center.w);
-				if (rightBarW > 0)
-				{
-					SDL_Rect srcR;
-					srcR.x = barSrc32->w - 16; // Streifen vom rechten Rand
-					srcR.y = 0;
-					srcR.w = 16;
-					srcR.h = barSrc32->h;
-
-					dst.x = center.x + center.w;
-					dst.y = center.y;
-					dst.w = rightBarW;
-					dst.h = center.h;
-
-					SDL_BlitScaled(barSrc32, &srcR, render32, &dst);
-
-					SDL_Surface* darkR = SDL_CreateRGBSurfaceWithFormat(0, dst.w, dst.h, 32, SDL_PIXELFORMAT_RGBA8888);
-					if (darkR)
-					{
-						SDL_FillRect(darkR, NULL, SDL_MapRGBA(darkR->format, 0, 0, 0, 160));
-						SDL_SetSurfaceBlendMode(darkR, SDL_BLENDMODE_BLEND);
-						SDL_BlitSurface(darkR, NULL, render32, &dst);
-						SDL_FreeSurface(darkR);
-					}
-				}
-
-				if (tmpBars)
-				{
-					SDL_FreeSurface(tmpBars);
-				}
-
-				// zentriertes 4:3-Hauptbild (mit Schrift etc.)
-				SDL_BlitScaled(screen32, NULL, render32, &center);
+				GL_BlitStaticWideLikeGloom2(screen32, render32, center);
 			}
 		}
 
@@ -2123,6 +2568,8 @@ int main(int argc, char* argv[])
 	SDL_FreeSurface(intermissionscreen);
 	SDL_FreeSurface(titlebitmap);
 	SDL_FreeSurface(titlemenubitmap);
+	if (zmTitleOverlay32) SDL_FreeSurface(zmTitleOverlay32);
+	if (zmTitleOverlay8) SDL_FreeSurface(zmTitleOverlay8);
 	SDL_FreeSurface(splashbitmap);
 	SDL_DestroyRenderer(ren);
 	SDL_DestroyWindow(win);

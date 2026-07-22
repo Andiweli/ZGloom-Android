@@ -171,8 +171,9 @@ void MenuScreen::Render(SDL_Surface* src, SDL_Surface* dest, Font& font)
         effectsmenu.clear();
         effectsmenu.push_back(MenuEntry("EFFECTS OPTIONS", ACTION_LABEL, 0, nullptr, nullptr));
         effectsmenu.push_back(MenuEntry("RETURN", ACTION_SWITCHMENU, MENUSTATUS_MAIN, nullptr, nullptr));
-        effectsmenu.push_back(MenuEntry("BLOOD SIZE: ", ACTION_INT, 5, Config::GetBlood, Config::SetBlood));
-        effectsmenu.push_back(MenuEntry("MUZZLE FLASH AND REFLECTION: ", ACTION_BOOL, 0, Config::GetMuzzleFlash, Config::SetMuzzleFlash));
+        effectsmenu.push_back(MenuEntry("BLOOD: ", ACTION_INT, 3, Config::GetBloodMode, Config::SetBloodMode));
+        effectsmenu.push_back(MenuEntry("MUZZLE FLASH: ", ACTION_BOOL, 0, Config::GetMuzzleFlash, Config::SetMuzzleFlash));
+        effectsmenu.push_back(MenuEntry("REFLECTIONS: ", ACTION_INT, 3, Config::GetReflections, Config::SetReflections));
         effectsmenu.push_back(MenuEntry("ATMOSPHERIC DUST: ", ACTION_BOOL, 0, MenuGetAtmosphericDust, MenuSetAtmosphericDust));
         effectsmenu.push_back(MenuEntry("BLOB SHADOWS: ", ACTION_BOOL, 0, MenuGetBlobShadows, MenuSetBlobShadows));
         effectsmenu.push_back(MenuEntry("ATMOSPHERIC VIGNETTE: ", ACTION_BOOL, 0, Config::GetVignetteEnabled, Config::SetVignetteEnabled));
@@ -241,10 +242,17 @@ MenuScreen::MenuScreen()
     selection = 1;    // first selectable entry (skip label)
     timer     = 0;
 
+    for (int i = 0; i < MENUSTATUS_COUNT; ++i)
+    {
+        parentStatus[i] = MENUSTATUS_MAIN;
+        parentSelection[i] = 1;
+        parentValid[i] = false;
+    }
+
     // MAIN
     mainmenu.push_back(MenuEntry("MAIN MENU", ACTION_LABEL, 0, nullptr, nullptr));
     mainmenu.push_back(MenuEntry("CONTINUE", ACTION_RETURN, MENURET_PLAY, nullptr, nullptr));
-	mainmenu.push_back(MenuEntry("SAVE POSITION", ACTION_RETURN, -100, nullptr, nullptr));
+    mainmenu.push_back(MenuEntry("SAVE POSITION", ACTION_RETURN, -100, nullptr, nullptr));
     mainmenu.push_back(MenuEntry("CONTROL OPTIONS", ACTION_SWITCHMENU, MENUSTATUS_CONTROLOPTIONS, nullptr, nullptr));
     mainmenu.push_back(MenuEntry("SOUND OPTIONS", ACTION_SWITCHMENU, MENUSTATUS_SOUNDOPTIONS, nullptr, nullptr));
     mainmenu.push_back(MenuEntry("DISPLAY OPTIONS", ACTION_SWITCHMENU, MENUSTATUS_DISPLAYOPTIONS, nullptr, nullptr));
@@ -257,8 +265,8 @@ MenuScreen::MenuScreen()
     soundmenu.push_back(MenuEntry("RETURN", ACTION_SWITCHMENU, MENUSTATUS_MAIN, nullptr, nullptr));
     soundmenu.push_back(MenuEntry("SFX VOLUME: ", ACTION_INT, 10, Config::GetSFXVol, Config::SetSFXVol));
     soundmenu.push_back(MenuEntry("MUSIC VOLUME: ", ACTION_INT, 10, Config::GetMusicVol, Config::SetMusicVol));
-
     soundmenu.push_back(MenuEntry("ATMOSPHERE VOLUME: ", ACTION_INT, 10, MenuGetAtmos, MenuSetAtmos));
+
     // CONTROL
     controlmenu.push_back(MenuEntry("CONTROL OPTIONS", ACTION_LABEL, 0, nullptr, nullptr));
     controlmenu.push_back(MenuEntry("RETURN", ACTION_SWITCHMENU, MENUSTATUS_MAIN, nullptr, nullptr));
@@ -269,18 +277,84 @@ MenuScreen::MenuScreen()
     // DISPLAY
     displaymenu.push_back(MenuEntry("DISPLAY OPTIONS", ACTION_LABEL, 0, nullptr, nullptr));
     displaymenu.push_back(MenuEntry("RETURN", ACTION_SWITCHMENU, MENUSTATUS_MAIN, nullptr, nullptr));
-        displaymenu.push_back(MenuEntry("DISPLAY ASPECT: ", ACTION_INT, 2, MenuGetDisplayAspect, MenuSetDisplayAspect));
+    displaymenu.push_back(MenuEntry("DISPLAY ASPECT: ", ACTION_INT, 2, MenuGetDisplayAspect, MenuSetDisplayAspect));
     displaymenu.push_back(MenuEntry("FIELD OF VIEW: ", ACTION_INT, 4, MenuGetFovPreset, MenuSetFovPreset));
+}
+
+void MenuScreen::EnterSubmenu(MENUSTATUS nextStatus)
+{
+    if (nextStatus < MENUSTATUS_MAIN || nextStatus >= MENUSTATUS_COUNT)
+        return;
+
+    parentStatus[nextStatus] = status;
+    parentSelection[nextStatus] = selection;
+    parentValid[nextStatus] = true;
+
+    status = nextStatus;
+    selection = (status == MENUSTATUS_KEYCONFIG) ? 0 : 1;
+}
+
+bool MenuScreen::ReturnToParentMenu()
+{
+    if (status == MENUSTATUS_MAIN)
+        return false;
+
+    const MENUSTATUS current = status;
+    if (parentValid[current])
+    {
+        status = parentStatus[current];
+        selection = parentSelection[current];
+        parentValid[current] = false;
+    }
+    else
+    {
+        status = MENUSTATUS_MAIN;
+        selection = 1;
+    }
+    return true;
+}
+
+bool MenuScreen::IsBinaryIntEntry(const MenuEntry& entry)
+{
+    return entry.action == ACTION_INT && entry.arg == 2;
+}
+
+void MenuScreen::IncrementIntEntry(MenuEntry& entry)
+{
+    if (entry.action != ACTION_INT || entry.arg <= 2 || !entry.getval || !entry.setval)
+        return;
+
+    int value = entry.getval() + 1;
+    if (value >= entry.arg)
+        value = 0;
+    entry.setval(value);
+}
+
+void MenuScreen::DecrementIntEntry(MenuEntry& entry)
+{
+    if (entry.action != ACTION_INT || entry.arg <= 2 || !entry.getval || !entry.setval)
+        return;
+
+    int value = entry.getval() - 1;
+    if (value < 0)
+        value = entry.arg - 1;
+    entry.setval(value);
 }
 
 void MenuScreen::HandleKeyMenu(SDL_Keycode sym)
 {
+    if (sym == SDLK_ESCAPE)
+    {
+        ReturnToParentMenu();
+        return;
+    }
+
     Config::SetKey((Config::keyenum)selection, SDL_GetScancodeFromKey(sym));
     selection++;
     if (selection == Config::KEY_END)
     {
-        selection = 1;            // back to first selectable main entry
-        status    = MENUSTATUS_MAIN;
+        // Finished key configuration: return to the exact CONFIGURE KEYS entry.
+        ReturnToParentMenu();
     }
 }
 
@@ -293,7 +367,7 @@ MenuScreen::MenuReturn MenuScreen::HandleStandardMenu(SDL_Keycode sym, std::vect
     switch (sym)
     {
         case SDLK_DOWN:
-            // move down, skipping labels
+            // Move down, skipping labels.
             do {
                 selection++;
                 if (selection >= (int)menu.size())
@@ -302,7 +376,7 @@ MenuScreen::MenuReturn MenuScreen::HandleStandardMenu(SDL_Keycode sym, std::vect
             break;
 
         case SDLK_UP:
-            // move up, skipping labels
+            // Move up, skipping labels.
             do {
                 selection--;
                 if (selection < 0)
@@ -311,88 +385,81 @@ MenuScreen::MenuReturn MenuScreen::HandleStandardMenu(SDL_Keycode sym, std::vect
             break;
 
         case SDLK_ESCAPE:
-            // ESC: in main menu -> back to game, otherwise back to MAIN
+            // B/ESC returns one level. From MAIN it closes the in-game menu.
             if (status == MENUSTATUS_MAIN)
-            {
                 return MENURET_PLAY;
-            }
-            else
-            {
-                status    = MENUSTATUS_MAIN;
-                selection = 1; // first selectable in main menu
-            }
+            ReturnToParentMenu();
             break;
 
-        // RIGHT / ENTER / SPACE / CTRL -> activate
-        case SDLK_RIGHT:
+        // A / ENTER / SPACE activates entries. Boolean and two-state entries
+        // toggle directly; numeric ranges are changed only with DPAD LEFT/RIGHT.
         case SDLK_SPACE:
         case SDLK_RETURN:
+        case SDLK_KP_ENTER:
         case SDLK_LCTRL:
         {
             if (isLabel(selection))
-                break; // labels are not actionable
+                break;
 
-            MenuEntry& e = menu[selection];
-            switch (e.action)
+            MenuEntry& entry = menu[selection];
+            switch (entry.action)
             {
                 case ACTION_BOOL:
-                {
-                    e.setval(!e.getval());
+                    if (entry.getval && entry.setval)
+                        entry.setval(!entry.getval());
                     break;
-                }
+
                 case ACTION_INT:
-                {
-                    int x = e.getval() + 1;
-                    if (x >= e.arg)
-                        x = 0;
-                    e.setval(x);
+                    if (IsBinaryIntEntry(entry) && entry.getval && entry.setval)
+                    {
+                        entry.setval(entry.getval() ? 0 : 1);
+                    }
+                    else
+                    {
+                        // Numeric and multi-choice entries may also be advanced
+                        // with A/confirm. Reaching the highest value wraps back
+                        // to zero, matching the original menu behaviour.
+                        IncrementIntEntry(entry);
+                    }
                     break;
-                }
+
                 case ACTION_SWITCHMENU:
                 {
-                    status = (MENUSTATUS)e.arg;
-                    if (status == MENUSTATUS_KEYCONFIG)
-                        selection = 0;
+                    const MENUSTATUS nextStatus = (MENUSTATUS)entry.arg;
+                    // RETURN entries lead back to the remembered parent and keep
+                    // its original selection instead of selecting CONTINUE.
+                    if (parentValid[status] && nextStatus == parentStatus[status])
+                        ReturnToParentMenu();
                     else
-                        selection = 1; // skip label in new menu
+                        EnterSubmenu(nextStatus);
                     break;
                 }
+
                 case ACTION_RETURN:
-                {
-                    if (e.arg == -100)
+                    if (entry.arg == -100)
                     {
                         g_RequestSavePosition = true;
-                        // Nach dem Speichern direkt ins Spiel zurückkehren
                         return MENURET_PLAY;
                     }
-                    return (MenuReturn)e.arg;
-                }
+                    return (MenuReturn)entry.arg;
 
                 case ACTION_LABEL:
-                    // Label/Überschrift -> keine Aktion ausführen
                     break;
             }
             break;
         }
 
-        // LEFT -> previous value for INT/BOOL
+        case SDLK_RIGHT:
+        {
+            if (!isLabel(selection))
+                IncrementIntEntry(menu[selection]);
+            break;
+        }
+
         case SDLK_LEFT:
         {
-            if (isLabel(selection))
-                break;
-
-            MenuEntry& e = menu[selection];
-            if (e.action == ACTION_INT)
-            {
-                int x = e.getval() - 1;
-                if (x < 0)
-                    x = e.arg - 1;
-                e.setval(x);
-            }
-            else if (e.action == ACTION_BOOL)
-            {
-                e.setval(!e.getval());
-            }
+            if (!isLabel(selection))
+                DecrementIntEntry(menu[selection]);
             break;
         }
 
@@ -405,83 +472,67 @@ MenuScreen::MenuReturn MenuScreen::HandleStandardMenu(SDL_Keycode sym, std::vect
 
 MenuScreen::MenuReturn MenuScreen::Update(SDL_Event& tevent)
 {
-    if (tevent.type == SDL_KEYDOWN)
+    if (tevent.type != SDL_KEYDOWN)
+        return MENURET_NOTHING;
+
+    switch (status)
     {
-        switch (status)
+        case MENUSTATUS_MAIN:
+            return HandleStandardMenu(tevent.key.keysym.sym, mainmenu);
+
+        case MENUSTATUS_KEYCONFIG:
+            HandleKeyMenu(tevent.key.keysym.sym);
+            break;
+
+        case MENUSTATUS_SOUNDOPTIONS:
+            return HandleStandardMenu(tevent.key.keysym.sym, soundmenu);
+
+        case MENUSTATUS_CONTROLOPTIONS:
+            return HandleStandardMenu(tevent.key.keysym.sym, controlmenu);
+
+        case MENUSTATUS_DISPLAYOPTIONS:
+            return HandleStandardMenu(tevent.key.keysym.sym, displaymenu);
+
+        case MENUSTATUS_EFFECTSOPTIONS:
         {
-            case MENUSTATUS_MAIN:
-            {
-                return HandleStandardMenu(tevent.key.keysym.sym, mainmenu);
-                break;
-            }
-            case MENUSTATUS_KEYCONFIG:
-            {
-                HandleKeyMenu(tevent.key.keysym.sym);
-                break;
-            }
-
-            case MENUSTATUS_SOUNDOPTIONS:
-            {
-                HandleStandardMenu(tevent.key.keysym.sym, soundmenu);
-                break;
-            }
-
-            case MENUSTATUS_CONTROLOPTIONS:
-            {
-                HandleStandardMenu(tevent.key.keysym.sym, controlmenu);
-                break;
-            }
-
-            case MENUSTATUS_DISPLAYOPTIONS:
-            {
-                HandleStandardMenu(tevent.key.keysym.sym, displaymenu);
-                break;
-            }
-            
-            case MENUSTATUS_EFFECTSOPTIONS:
-            {
-                static std::vector<MenuEntry> effectsmenu;
-                effectsmenu.clear();
-                effectsmenu.push_back(MenuEntry("EFFECTS OPTIONS", ACTION_LABEL, 0, nullptr, nullptr));
-                effectsmenu.push_back(MenuEntry("RETURN", ACTION_SWITCHMENU, MENUSTATUS_MAIN, nullptr, nullptr));
-                effectsmenu.push_back(MenuEntry("BLOOD SIZE: ", ACTION_INT, 5, Config::GetBlood, Config::SetBlood));
-                effectsmenu.push_back(MenuEntry("MUZZLE FLASH AND REFLECTION: ", ACTION_BOOL, 0, Config::GetMuzzleFlash, Config::SetMuzzleFlash));
-                effectsmenu.push_back(MenuEntry("ATMOSPHERIC DUST: ", ACTION_BOOL, 0, MenuGetAtmosphericDust, MenuSetAtmosphericDust));
-                effectsmenu.push_back(MenuEntry("BLOB SHADOWS: ", ACTION_BOOL, 0, MenuGetBlobShadows, MenuSetBlobShadows));
-                // Halbzeile //
-                effectsmenu.push_back(MenuEntry("ATMOSPHERIC VIGNETTE: ", ACTION_BOOL, 0, Config::GetVignetteEnabled, Config::SetVignetteEnabled));
-                effectsmenu.push_back(MenuEntry("VIGNETTE STRENGTH: ", ACTION_INT, 6, Config::GetVignetteStrength, Config::SetVignetteStrength));
-                effectsmenu.push_back(MenuEntry("VIGNETTE RADIUS: ", ACTION_INT, 6, Config::GetVignetteRadius, Config::SetVignetteRadius));
-                effectsmenu.push_back(MenuEntry("VIGNETTE SOFTNESS: ", ACTION_INT, 6, Config::GetVignetteSoftness, Config::SetVignetteSoftness));
-                effectsmenu.push_back(MenuEntry("VIGNETTE WARMTH: ", ACTION_BOOL, 0, MenuGetVignetteWarmthBool, MenuSetVignetteWarmthBool));
-                // Halbzeile //
-                effectsmenu.push_back(MenuEntry("FILM GRAIN: ", ACTION_BOOL, 0, Config::GetFilmGrain, Config::SetFilmGrain));
-                effectsmenu.push_back(MenuEntry("FILM GRAIN INTENSITY: ", ACTION_INT, 6, Config::GetFilmGrainIntensity, Config::SetFilmGrainIntensity));
-                // Halbzeile //
-                effectsmenu.push_back(MenuEntry("SCANLINES: ", ACTION_BOOL, 0, Config::GetScanlines, Config::SetScanlines));
-                effectsmenu.push_back(MenuEntry("SCANLINE INTENSITY: ", ACTION_INT, 6, Config::GetScanlineIntensity, Config::SetScanlineIntensity));
-                HandleStandardMenu(tevent.key.keysym.sym, effectsmenu);
-                break;
-            }
-            case MENUSTATUS_CHEATOPTIONS:
-            {
-                static std::vector<MenuEntry> cheatmenu;
-                cheatmenu.clear();
-                cheatmenu.push_back(MenuEntry("CHEAT OPTIONS", ACTION_LABEL, 0, nullptr, nullptr));
-                cheatmenu.push_back(MenuEntry("RETURN", ACTION_SWITCHMENU, MENUSTATUS_MAIN, nullptr, nullptr));
-                cheatmenu.push_back(MenuEntry("GOD MODE: ", ACTION_BOOL, 0, MenuGetCheatGodMode, MenuSetCheatGodMode));
-                cheatmenu.push_back(MenuEntry("ONE HIT KILL: ", ACTION_BOOL, 0, MenuGetCheatOneHitKill, MenuSetCheatOneHitKill));
-                cheatmenu.push_back(MenuEntry("BOUNCY BULLETS: ", ACTION_BOOL, 0, MenuGetCheatBouncy, MenuSetCheatBouncy));
-                cheatmenu.push_back(MenuEntry("THERMO GOGGLES: ", ACTION_BOOL, 0, MenuGetCheatThermo, MenuSetCheatThermo));
-                cheatmenu.push_back(MenuEntry("INVISIBILITY: ", ACTION_BOOL, 0, MenuGetCheatInvis, MenuSetCheatInvis));
-                cheatmenu.push_back(MenuEntry("WEAPON: ", ACTION_INT, 6, MenuGetCheatStartWeapon, MenuSetCheatStartWeapon));
-                HandleStandardMenu(tevent.key.keysym.sym, cheatmenu);
-                break;
-            }
-
-            default:
-                break;
+            static std::vector<MenuEntry> effectsmenu;
+            effectsmenu.clear();
+            effectsmenu.push_back(MenuEntry("EFFECTS OPTIONS", ACTION_LABEL, 0, nullptr, nullptr));
+            effectsmenu.push_back(MenuEntry("RETURN", ACTION_SWITCHMENU, MENUSTATUS_MAIN, nullptr, nullptr));
+            effectsmenu.push_back(MenuEntry("BLOOD: ", ACTION_INT, 3, Config::GetBloodMode, Config::SetBloodMode));
+            effectsmenu.push_back(MenuEntry("MUZZLE FLASH: ", ACTION_BOOL, 0, Config::GetMuzzleFlash, Config::SetMuzzleFlash));
+            effectsmenu.push_back(MenuEntry("REFLECTIONS: ", ACTION_INT, 3, Config::GetReflections, Config::SetReflections));
+            effectsmenu.push_back(MenuEntry("ATMOSPHERIC DUST: ", ACTION_BOOL, 0, MenuGetAtmosphericDust, MenuSetAtmosphericDust));
+            effectsmenu.push_back(MenuEntry("BLOB SHADOWS: ", ACTION_BOOL, 0, MenuGetBlobShadows, MenuSetBlobShadows));
+            effectsmenu.push_back(MenuEntry("ATMOSPHERIC VIGNETTE: ", ACTION_BOOL, 0, Config::GetVignetteEnabled, Config::SetVignetteEnabled));
+            effectsmenu.push_back(MenuEntry("VIGNETTE STRENGTH: ", ACTION_INT, 6, Config::GetVignetteStrength, Config::SetVignetteStrength));
+            effectsmenu.push_back(MenuEntry("VIGNETTE RADIUS: ", ACTION_INT, 6, Config::GetVignetteRadius, Config::SetVignetteRadius));
+            effectsmenu.push_back(MenuEntry("VIGNETTE SOFTNESS: ", ACTION_INT, 6, Config::GetVignetteSoftness, Config::SetVignetteSoftness));
+            effectsmenu.push_back(MenuEntry("VIGNETTE WARMTH: ", ACTION_BOOL, 0, MenuGetVignetteWarmthBool, MenuSetVignetteWarmthBool));
+            effectsmenu.push_back(MenuEntry("FILM GRAIN: ", ACTION_BOOL, 0, Config::GetFilmGrain, Config::SetFilmGrain));
+            effectsmenu.push_back(MenuEntry("FILM GRAIN INTENSITY: ", ACTION_INT, 6, Config::GetFilmGrainIntensity, Config::SetFilmGrainIntensity));
+            effectsmenu.push_back(MenuEntry("SCANLINES: ", ACTION_BOOL, 0, Config::GetScanlines, Config::SetScanlines));
+            effectsmenu.push_back(MenuEntry("SCANLINE INTENSITY: ", ACTION_INT, 6, Config::GetScanlineIntensity, Config::SetScanlineIntensity));
+            return HandleStandardMenu(tevent.key.keysym.sym, effectsmenu);
         }
+
+        case MENUSTATUS_CHEATOPTIONS:
+        {
+            static std::vector<MenuEntry> cheatmenu;
+            cheatmenu.clear();
+            cheatmenu.push_back(MenuEntry("CHEAT OPTIONS", ACTION_LABEL, 0, nullptr, nullptr));
+            cheatmenu.push_back(MenuEntry("RETURN", ACTION_SWITCHMENU, MENUSTATUS_MAIN, nullptr, nullptr));
+            cheatmenu.push_back(MenuEntry("GOD MODE: ", ACTION_BOOL, 0, MenuGetCheatGodMode, MenuSetCheatGodMode));
+            cheatmenu.push_back(MenuEntry("ONE HIT KILL: ", ACTION_BOOL, 0, MenuGetCheatOneHitKill, MenuSetCheatOneHitKill));
+            cheatmenu.push_back(MenuEntry("BOUNCY BULLETS: ", ACTION_BOOL, 0, MenuGetCheatBouncy, MenuSetCheatBouncy));
+            cheatmenu.push_back(MenuEntry("THERMO GOGGLES: ", ACTION_BOOL, 0, MenuGetCheatThermo, MenuSetCheatThermo));
+            cheatmenu.push_back(MenuEntry("INVISIBILITY: ", ACTION_BOOL, 0, MenuGetCheatInvis, MenuSetCheatInvis));
+            cheatmenu.push_back(MenuEntry("WEAPON: ", ACTION_INT, 6, MenuGetCheatStartWeapon, MenuSetCheatStartWeapon));
+            return HandleStandardMenu(tevent.key.keysym.sym, cheatmenu);
+        }
+
+        default:
+            break;
     }
 
     return MENURET_NOTHING;
@@ -573,6 +624,30 @@ void MenuScreen::DisplayStandardMenu(std::vector<MenuEntry>& menu, bool flash, i
                 if (v < 0) v = 0;
                 if (v > 3) v = 3;
                 menustring += kFovNames[v];
+            }
+            else if (menustring.rfind("BLOOD", 0) == 0)
+            {
+                static const char* kBloodNames[3] = {
+                    "OFF",
+                    "SPLATTER",
+                    "MASSACRE"
+                };
+                int v = e.getval();
+                if (v < 0) v = 0;
+                if (v > 2) v = 2;
+                menustring += kBloodNames[v];
+            }
+            else if (menustring.rfind("REFLECTIONS", 0) == 0)
+            {
+                static const char* kReflectionNames[3] = {
+                    "OFF",
+                    "OBJECTS",
+                    "ALL"
+                };
+                int v = e.getval();
+                if (v < 0) v = 0;
+                if (v > 2) v = 2;
+                menustring += kReflectionNames[v];
             }
             else if (menustring.rfind("WEAPON", 0) == 0)
             {
