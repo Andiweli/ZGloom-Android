@@ -1,6 +1,6 @@
 # ZGloom-Android - Amiga Gloom port for Android & OUYA
 
-Android / OUYA / Logitech G-Cloud port of the modern **ZGloom** engine, bringing the classic Amiga FPS **Gloom** and its successors to **gamepad-driven** Android devices.  
+Android / OUYA / Logitech G-Cloud port of the modern **ZGloom** engine, bringing the classic Amiga FPS **Gloom** and its successors to **gamepad-driven** Android and Chrome OS devices.  
 
 > Play Gloom, Gloom Deluxe, Gloom 3 and Zombie Massacre on Android and OUYA with a fixed renderer, widescreen support, post-processing overlays and save/load position – while staying faithful to the original Amiga gameplay.
 
