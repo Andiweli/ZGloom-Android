@@ -19,9 +19,12 @@
         android:theme="@style/AppTheme"
         android:requestLegacyExternalStorage="true">
 
-        <!-- SDL-based main activity for ZGloom -->
+        <!--
+            ExitSafeZGloomActivity inherits all existing ZGloomActivity logic
+            and adds the black, animation-free SDL shutdown cover.
+        -->
         <activity
-            android:name=".ZGloomActivity"
+            android:name=".ExitSafeZGloomActivity"
             android:exported="true"
             android:screenOrientation="landscape"
             android:launchMode="singleTask"

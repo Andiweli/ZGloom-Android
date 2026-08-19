@@ -4,7 +4,24 @@
         <item name="colorPrimary">@android:color/black</item>
         <item name="colorPrimaryDark">@android:color/black</item>
         <item name="colorAccent">@android:color/white</item>
+
+        <!-- Never expose Android's default/light window while SDL starts/stops. -->
         <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowDisablePreview">true</item>
+
+        <!-- Prevent ChromeOS/Android from inserting a bright transition frame. -->
+        <item name="android:windowAnimationStyle">@style/NoWindowAnimation</item>
+    </style>
+
+    <style name="NoWindowAnimation" parent="android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@anim/no_animation</item>
+        <item name="android:activityOpenExitAnimation">@anim/no_animation</item>
+        <item name="android:activityCloseEnterAnimation">@anim/no_animation</item>
+        <item name="android:activityCloseExitAnimation">@anim/no_animation</item>
+        <item name="android:taskOpenEnterAnimation">@anim/no_animation</item>
+        <item name="android:taskOpenExitAnimation">@anim/no_animation</item>
+        <item name="android:taskCloseEnterAnimation">@anim/no_animation</item>
+        <item name="android:taskCloseExitAnimation">@anim/no_animation</item>
     </style>
 
 </resources>
