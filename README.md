@@ -56,11 +56,14 @@ ZGloom is a modern reimplementation of this engine.
 
 ---
 
-## 🖼️ Gameplay-Video and Screenshots
+## 🖼️ Screenshots
 
-https://github.com/user-attachments/assets/6a16865d-d990-4e9c-aaa1-b48a14ab7d9e
+<img width="1920" height="1080" alt="gloom0" src="https://github.com/user-attachments/assets/94e04fe1-75d7-4623-b9c9-dceda3078d46" />
+<img width="1920" height="1080" alt="gloom1" src="https://github.com/user-attachments/assets/3b33f14e-f3a9-4b1e-b679-6c0e97f32759" />
+<img width="1920" height="1080" alt="gloom2" src="https://github.com/user-attachments/assets/4bfb349c-c74c-4115-a31c-4794bfa52be2" />
+<img width="1920" height="1080" alt="gloom3" src="https://github.com/user-attachments/assets/3af93d27-7bda-498d-a23c-bf80313a579c" />
+<img width="1920" height="1080" alt="gloom4" src="https://github.com/user-attachments/assets/41ae174c-c69d-48f7-a768-30a430faa8e5" />
 
-<img width="1280" height="1440" alt="Gloom-Screenshots" src="https://github.com/user-attachments/assets/617ad5bb-8bb4-4449-a830-a730fda007ef" />
 
 ---
 
