@@ -1,41 +1,35 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.ast.zgloom">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Storage permissions for reading/writing ZGloom data on external storage -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <!-- Android 4.1-4.3 need WRITE permission for app-specific external files.
+         Newer Android versions do not need it for getExternalFilesDir(). -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="18" />
 
-    <!-- OUYA / controller-centric devices: require gamepad, touchscreen optional -->
-    <uses-feature android:name="android.hardware.gamepad" android:required="true" />
-    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature
+        android:name="android.hardware.gamepad"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.screen.landscape"
+        android:required="false" />
 
     <application
         android:allowBackup="true"
         android:appCategory="game"
         android:isGame="true"
-        android:icon="@drawable/gloom_android_icon"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/AppTheme"
-        android:requestLegacyExternalStorage="true">
+        android:theme="@style/AppTheme">
 
-        <!--
-            ExitSafeZGloomActivity inherits all existing ZGloomActivity logic
-            and adds the black, animation-free SDL shutdown cover.
-        -->
         <activity
             android:name=".ExitSafeZGloomActivity"
             android:exported="true"
-            android:screenOrientation="landscape"
+            android:label="@string/app_name"
             android:launchMode="singleTask"
-            android:label="@string/app_name">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-                <!-- OUYA game category -->
-                <category android:name="tv.ouya.intent.category.GAME" />
-            </intent-filter>
-        </activity>
+            android:screenOrientation="landscape" />
 
     </application>
 

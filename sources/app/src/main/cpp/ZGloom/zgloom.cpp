@@ -1038,32 +1038,34 @@ static void GL_DrawText(SDL_Renderer* ren, int x, int y, const std::string& text
 }
 
 
-// Launcher window: background + big centered list with fade-out
+// Launcher window: background + centered list with fade-out.
+//
+// IMPORTANT: On Android Automotive OS the physical display size can differ
+// substantially from the drawable area that SDL actually receives.  Using
+// SDL_GetCurrentDisplayMode() for layout therefore makes the launcher appear
+// oversized and off-centre when AAOS reserves space for its own system UI.
+// The launcher uses the renderer output size for all layout/scaling instead.
 static bool GL_RunGameLauncher(const std::vector<GameInstall>& installs, GameInstall& outSelection)
 {
     if (installs.empty())
         return false;
 
-    // Determine window size & which background to use (match actual display size)
-    int winW = 960;
-    int winH = 720;
-    bool useWideBG = false;
+    // Use the display size only as a request for the initial window size.
+    // Android/AAOS may ignore this and provide a smaller application surface.
+    int requestedW = 960;
+    int requestedH = 720;
 
     SDL_DisplayMode dm;
     if (SDL_GetCurrentDisplayMode(0, &dm) == 0 && dm.w > 0 && dm.h > 0)
     {
-        float aspect = dm.w / (float)dm.h;
-        useWideBG = (aspect > 1.5f); // 16:9 vs 4:3/5:4 etc.
-
-        // Use the real display size to avoid affecting game scaling
-        winW = dm.w;
-        winH = dm.h;
+        requestedW = dm.w;
+        requestedH = dm.h;
     }
 
     SDL_Window* win = SDL_CreateWindow(
         "ZGloom Launcher",
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        winW, winH,
+        requestedW, requestedH,
         SDL_WINDOW_SHOWN);
 
     if (!win)
@@ -1076,6 +1078,24 @@ static bool GL_RunGameLauncher(const std::vector<GameInstall>& installs, GameIns
         SDL_DestroyWindow(win);
         return false;
     }
+
+    // This is the size that is really drawable.  On AAOS this can be smaller
+    // than the physical display because the OEM keeps vehicle/system controls
+    // visible around the app.
+    int winW = 0;
+    int winH = 0;
+    if (SDL_GetRendererOutputSize(ren, &winW, &winH) != 0 || winW <= 0 || winH <= 0)
+    {
+        SDL_GetWindowSize(win, &winW, &winH);
+        if (winW <= 0 || winH <= 0)
+        {
+            winW = requestedW;
+            winH = requestedH;
+        }
+    }
+
+    const float aspect = winW / (float)winH;
+    const bool useWideBG = (aspect > 1.5f); // 16:9/wide vs 4:3/5:4 etc.
 
     SDL_Texture* bgTex = nullptr;
     {
@@ -1094,12 +1114,7 @@ static bool GL_RunGameLauncher(const std::vector<GameInstall>& installs, GameIns
     const SDL_Color colNormal    = { 255, 255, 255, 255 };
     const SDL_Color colSelected  = { 255, 230, 100, 255 };
 
-    // Font scales
-    const int scaleTitle     = 7; // SELECT GAME
-    const int scaleList      = 7; // Spieleliste
-    const int scaleHint      = 4; // etwas kleiner fuer Hint-Zeile
-
-    // Uppercase labels for drawing
+    // Uppercase labels for drawing.
     std::vector<std::string> labelsUpper;
     labelsUpper.reserve(installs.size());
     for (size_t i = 0; i < installs.size(); ++i)
@@ -1110,22 +1125,81 @@ static bool GL_RunGameLauncher(const std::vector<GameInstall>& installs, GameIns
         labelsUpper.push_back(s);
     }
 
-    const std::string title     = "SELECT GAME";
-    const std::string hint      = "DPAD TO MOVE     A TO START     B TO EXIT";
+    const std::string title = "SELECT GAME";
+    const std::string hint  = "DPAD TO MOVE     A TO START     B TO EXIT";
 
-    const int fontHTitle     = 8 * scaleTitle;
-    const int fontHHint      = 8 * scaleHint;
-    const int fontHList      = 8 * scaleList;
-    const int listGap        = fontHList / 2;
+    // Scale relative to the actual drawable height.  The launcher font is
+    // intentionally kept a little smaller than before so it fits AAOS
+    // displays more comfortably while retaining the responsive layout.
+    // At 720 px drawable height the target scales are now 6/6/3 instead of
+    // 7/7/4 for title/list/hint.
+    int scaleTitle = (winH * 6 + 360) / 720;
+    int scaleList  = (winH * 6 + 360) / 720;
+    int scaleHint  = (winH * 3 + 360) / 720;
 
-    // Titel oben, Hint direkt darunter (beide zentriert)
-    const int titleY = winH / 12;
-    const int hintY  = titleY + fontHTitle + fontHHint / 2;
+    if (scaleTitle < 2) scaleTitle = 2;
+    if (scaleList  < 2) scaleList  = 2;
+    if (scaleHint  < 1) scaleHint  = 1;
+    if (scaleTitle > 6) scaleTitle = 6;
+    if (scaleList  > 6) scaleList  = 6;
+    if (scaleHint  > 3) scaleHint  = 3;
 
-    // Spieleliste vertikal zentriert
-    const int numEntries       = (int)installs.size();
-    const int listBlockHeight  = numEntries * fontHList + (numEntries - 1) * listGap;
-    const int listY0           = (winH - listBlockHeight) / 2;
+    // Never allow a line to exceed 90% of the actual renderer width.
+    const int maxTextW = (winW * 9) / 10;
+
+    while (scaleTitle > 1 && GL_TextWidth(title, scaleTitle) > maxTextW)
+        --scaleTitle;
+    while (scaleHint > 1 && GL_TextWidth(hint, scaleHint) > maxTextW)
+        --scaleHint;
+
+    int longestListChars = 0;
+    for (size_t i = 0; i < labelsUpper.size(); ++i)
+    {
+        int chars = (int)labelsUpper[i].size();
+        if (chars > longestListChars)
+            longestListChars = chars;
+    }
+    while (scaleList > 1 && longestListChars * 8 * scaleList > maxTextW)
+        --scaleList;
+
+    int fontHTitle = 8 * scaleTitle;
+    int fontHHint  = 8 * scaleHint;
+    int fontHList  = 8 * scaleList;
+    int listGap    = fontHList / 2;
+
+    // Title/hint use proportional margins based on the drawable surface,
+    // never on the full physical display.
+    int topMargin = winH / 18;
+    if (topMargin < 8)
+        topMargin = 8;
+
+    const int titleY = topMargin;
+    const int hintY  = titleY + fontHTitle + std::max(4, fontHHint / 2);
+
+    const int numEntries = (int)installs.size();
+
+    // Reserve the area below title + hint for the game list.  If many entries
+    // are present, reduce only the list font until the complete block fits.
+    const int listTop = hintY + fontHHint + std::max(8, winH / 24);
+    const int bottomMargin = std::max(8, winH / 18);
+    int availableListH = winH - listTop - bottomMargin;
+    if (availableListH < 1)
+        availableListH = 1;
+
+    int listBlockHeight = numEntries * fontHList + (numEntries - 1) * listGap;
+    while (scaleList > 1 && listBlockHeight > availableListH)
+    {
+        --scaleList;
+        fontHList = 8 * scaleList;
+        listGap = fontHList / 2;
+        listBlockHeight = numEntries * fontHList + (numEntries - 1) * listGap;
+    }
+
+    // Centre the list inside the remaining usable area rather than against the
+    // physical AAOS display.  This fixes the R5 launcher offset.
+    int listY0 = listTop;
+    if (availableListH > listBlockHeight)
+        listY0 += (availableListH - listBlockHeight) / 2;
 
     bool running  = true;
     int  selected = 0;
@@ -1230,12 +1304,11 @@ static bool GL_RunGameLauncher(const std::vector<GameInstall>& installs, GameIns
         for (int i = 0; i < numEntries; ++i)
         {
             const SDL_Color& col = (i == selected) ? colSelected : colNormal;
-            int w  = GL_TextWidth(labelsUpper[i], scaleList);
-            int x  = (winW - w) / 2;
-            int y  = listY0 + i * (fontHList + listGap);
+            int w = GL_TextWidth(labelsUpper[i], scaleList);
+            int x = (winW - w) / 2;
+            int y = listY0 + i * (fontHList + listGap);
             GL_DrawText(ren, x, y, labelsUpper[i], scaleList, col);
         }
-
 
         SDL_RenderPresent(ren);
         SDL_Delay(16);

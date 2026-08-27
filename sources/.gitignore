@@ -1,0 +1,15 @@
+# Android Studio / Gradle machine-local state
+.gradle/
+.idea/
+*.iml
+local.properties
+
+# Build output
+build/
+app/build/
+app/.cxx/
+.externalNativeBuild/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

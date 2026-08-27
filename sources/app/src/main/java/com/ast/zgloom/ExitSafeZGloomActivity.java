@@ -14,6 +14,10 @@ import android.widget.FrameLayout;
  * ZGloom activity wrapper that keeps the Android/ChromeOS window opaque while
  * SDL removes its SurfaceView during shutdown.
  *
+ * The wrapper also requests Android's standard immersive fullscreen mode.
+ * Android Automotive OS / the vehicle System UI remains free to keep mandatory
+ * vehicle controls visible if the OEM does not allow them to be hidden.
+ *
  * The original ZGloomActivity remains unchanged. All data-installation,
  * build-info overlay, controller and SDL startup behaviour is inherited.
  */
@@ -43,8 +47,41 @@ public class ExitSafeZGloomActivity extends ZGloomActivity {
                 new ColorDrawable(EXIT_BACKGROUND_COLOR));
         getWindow().getDecorView().setBackgroundColor(EXIT_BACKGROUND_COLOR);
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            getWindow().setStatusBarColor(EXIT_BACKGROUND_COLOR);
+            getWindow().setNavigationBarColor(EXIT_BACKGROUND_COLOR);
+        }
+
+        // Ask Android/AAOS for the maximum normal fullscreen area.
+        applyImmersiveMode();
+
         // Suppress the normal Activity transition on supported Android versions.
         overridePendingTransition(0, 0);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        /*
+         * Android may restore system bars while another Activity, permission
+         * dialog or vehicle UI was in front. Re-apply immersive mode whenever
+         * ZGloom becomes active again.
+         */
+        applyImmersiveMode();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+
+        if (hasFocus && !mFinishScheduled) {
+            /*
+             * Re-apply after focus changes as System UI can temporarily reveal
+             * its bars while switching between ZGloom and the vehicle UI.
+             */
+            applyImmersiveMode();
+        }
     }
 
     @Override
@@ -92,6 +129,27 @@ public class ExitSafeZGloomActivity extends ZGloomActivity {
         getWindow().getDecorView().setBackgroundColor(EXIT_BACKGROUND_COLOR);
 
         super.onDestroy();
+    }
+
+    /**
+     * Request Android's immersive fullscreen mode using the legacy System UI
+     * flags. This path is available with the project's older compile SDK and
+     * is still honoured by Android 12.
+     *
+     * On Android Automotive OS this is only a request. Mandatory OEM vehicle
+     * controls can remain visible and are not bypassed by this code.
+     */
+    @SuppressWarnings("deprecation")
+    private void applyImmersiveMode() {
+        final View decorView = getWindow().getDecorView();
+
+        decorView.setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        | View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
     }
 
     private void showExitCover() {
