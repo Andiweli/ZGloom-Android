@@ -1181,7 +1181,14 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
         if (getContext() == null) {
             return false;
         }
-        return getContext().getPackageManager().hasSystemFeature("org.chromium.arc.device_management");
+
+        // Current ChromeOS/ARC releases expose org.chromium.arc. Older ARC++
+        // versions used org.chromium.arc.device_management, so keep that as a
+        // compatibility fallback. Do not infer ChromeOS from touchscreen or
+        // gamepad availability: Chromebooks may have either, both or neither.
+        final PackageManager packageManager = getContext().getPackageManager();
+        return packageManager.hasSystemFeature("org.chromium.arc")
+                || packageManager.hasSystemFeature("org.chromium.arc.device_management");
     }
 
     /**

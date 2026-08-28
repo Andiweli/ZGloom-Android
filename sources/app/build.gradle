@@ -14,7 +14,7 @@ android {
         applicationId 'com.ast.gloomcollection'
         minSdk 16
         targetSdk 36
-        versionCode 20
+        versionCode 21
         versionName '09.2026'
 
         externalNativeBuild {

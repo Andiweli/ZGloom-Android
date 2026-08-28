@@ -77,8 +77,19 @@ public class ZGloomActivity extends SDLActivity {
         // RetroTouch is deliberately kept as an external AAR. The small
         // Gloom-specific bridge describes actions/layouts and feeds the native
         // input layer, so future compatible updates only replace the AAR file.
+        //
+        // ChromeOS is a keyboard/mouse platform for ZGloom, even on Chromebook
+        // models that physically have a touchscreen. Never create RetroTouch
+        // there: controller detection alone is insufficient because a
+        // Chromebook can legitimately have no GAMEPAD/JOYSTICK device at all.
+        // Keeping the view out of the hierarchy also guarantees that RetroTouch
+        // cannot intercept mouse/touchpad events or show its settings control.
         if (mLayout != null) {
-            mRetroTouchBridge = new GloomRetroTouchBridge(this, mLayout);
+            if (SDLActivity.isChromebook()) {
+                Log.i(TAG, "ChromeOS detected: RetroTouch disabled");
+            } else {
+                mRetroTouchBridge = new GloomRetroTouchBridge(this, mLayout);
+            }
         }
     }
 
