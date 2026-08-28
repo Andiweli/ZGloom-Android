@@ -14,8 +14,8 @@ android {
         applicationId 'com.ast.gloomcollection'
         minSdk 16
         targetSdk 36
-        versionCode 18
-        versionName '08.2026'
+        versionCode 20
+        versionName '09.2026'
 
         externalNativeBuild {
             cmake {
@@ -81,6 +81,7 @@ androidComponents {
 }
 
 dependencies {
+    implementation files('libs/retrotouch.aar')
     implementation 'androidx.appcompat:appcompat:1.1.0'
     implementation 'com.google.android.material:material:1.1.0'
     implementation 'androidx.constraintlayout:constraintlayout:1.1.3'

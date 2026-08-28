@@ -61,6 +61,59 @@ namespace Config
 	static SDL_GameController *controller = nullptr;
 	static bool isOuyaController = false;
 
+	static void UpdateOuyaControllerFlag()
+	{
+		isOuyaController = false;
+		if (!controller)
+			return;
+
+		const char* cname = SDL_GameControllerName(controller);
+		if (!cname)
+			return;
+
+		std::string lname(cname);
+		std::transform(lname.begin(), lname.end(), lname.begin(),
+			[](unsigned char c) { return (char)std::tolower(c); });
+		isOuyaController = (lname.find("ouya") != std::string::npos);
+	}
+
+	// Keep Gloom's SDL_GameController handle in sync with Android at runtime.
+	// RetroTouch detects Android GAMEPAD/JOYSTICK devices dynamically, so Gloom
+	// must do the same; otherwise enabling a controller while already playing
+	// hides RetroTouch but leaves the native controller pointer null forever.
+	static bool EnsureControllerConnected()
+	{
+		if (controller)
+		{
+			if (SDL_GameControllerGetAttached(controller) == SDL_TRUE)
+				return true;
+
+			SDL_Log("ZGloom: game controller disconnected: %s",
+				SDL_GameControllerName(controller) ? SDL_GameControllerName(controller) : "unknown");
+			SDL_GameControllerClose(controller);
+			controller = nullptr;
+			isOuyaController = false;
+		}
+
+		for (int i = 0; i < SDL_NumJoysticks(); ++i)
+		{
+			if (!SDL_IsGameController(i))
+				continue;
+
+			SDL_GameController* candidate = SDL_GameControllerOpen(i);
+			if (!candidate)
+				continue;
+
+			controller = candidate;
+			UpdateOuyaControllerFlag();
+			SDL_Log("ZGloom: game controller connected: %s",
+				SDL_GameControllerName(controller) ? SDL_GameControllerName(controller) : "unknown");
+			return true;
+		}
+
+		return false;
+	}
+
 
 	void SetDebug(bool b)
 	{
@@ -369,28 +422,9 @@ namespace Config
 
 		autofire = false;
 
-		for (int i = 0; i < SDL_NumJoysticks(); ++i) 
-		{
-			if (SDL_IsGameController(i)) 
-			{
-				controller = SDL_GameControllerOpen(i);
-				break;
-			}
-		}
-
-		if (controller)
-		{
-			const char* cname = SDL_GameControllerName(controller);
-			if (cname)
-			{
-				std::string lname(cname);
-				std::transform(lname.begin(), lname.end(), lname.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-				if (lname.find("ouya") != std::string::npos)
-				{
-					isOuyaController = true;
-				}
-			}
-		}
+		// Open an already-present controller. If none is connected yet,
+		// EnsureControllerConnected() will pick one up later at runtime.
+		EnsureControllerConnected();
 
 		std::ifstream file;
 
@@ -699,26 +733,30 @@ int GetMT()
 
 	bool HaveController()
 	{
-		return controller != nullptr;
+		return EnsureControllerConnected();
 	}
 
 	Sint16 GetControllerRot()
 	{
+		if (!EnsureControllerConnected()) return 0;
 		return SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_RIGHTX);
 	}
 
 	Sint16 GetControllerY()
 	{
+		if (!EnsureControllerConnected()) return 0;
 		return SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTY);
 	}
 
 	Sint16 GetControllerX()
 	{
+		if (!EnsureControllerConnected()) return 0;
 		return SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTX);
 	}
 
 	bool GetControllerFire()
 	{
+		if (!EnsureControllerConnected()) return false;
 		// Fire: right shoulder or right trigger only
 		if (SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)) return true;
 		if (SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 8000) return true;
@@ -727,12 +765,14 @@ int GetMT()
 
 	bool GetControllerConfirm()
 	{
+		if (!EnsureControllerConnected()) return false;
 		// Confirm (menus only): bottom face button (O on OUYA, A on Xbox, Cross on PlayStation)
 		return SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_A) != 0;
 	}
 
 	bool GetControllerRun()
 	{
+		if (!EnsureControllerConnected()) return false;
 		// RUN: left shoulder or left trigger
 		if (SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_LEFTSHOULDER)) return true;
 		if (SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 8000) return true;
@@ -742,22 +782,27 @@ int GetMT()
 	// just for menus
 	bool GetControllerDown()
 	{
+		if (!EnsureControllerConnected()) return false;
 		return SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_DOWN)!=0;
 	}
 	bool GetControllerUp()
 	{
+		if (!EnsureControllerConnected()) return false;
 		return SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_UP)!=0;
 	}
 	bool GetControllerLeft()
 	{
+		if (!EnsureControllerConnected()) return false;
 		return SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_LEFT)!=0;
 	}
 	bool GetControllerRight()
 	{
+		if (!EnsureControllerConnected()) return false;
 		return SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)!=0;
 	}
 	bool GetControllerStart()
 	{
+		if (!EnsureControllerConnected()) return false;
 		// START or GUIDE, plus Y on OUYA (top face button) -> Pause / Menu
 		if (SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_START)) return true;
 		if (SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_GUIDE)) return true;
@@ -766,6 +811,7 @@ int GetMT()
 	}
 	bool GetControllerBack()
 	{
+		if (!EnsureControllerConnected()) return false;
 		// BACK button or right face button (A on OUYA, B on Xbox, Circle on PlayStation) as "back"
 		if (SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_BACK)) return true;
 		if (SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_B)) return true;
@@ -773,9 +819,11 @@ int GetMT()
 	}
 	bool GetControllerMap()
 	{
+		if (!EnsureControllerConnected()) return false;
 		// Map: left face button (U on OUYA, X on Xbox, Square on PlayStation)
 		return SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_X) != 0;
 	}
+
 void SetMusicVol(int vol)
 	{
 		musvol = vol;

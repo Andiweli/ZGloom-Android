@@ -57,6 +57,7 @@ public class ZGloomActivity extends SDLActivity {
     private ProgressBar mInstallProgressBar = null;
     private TextView mInstallProgressView = null;
     private TextView mBuildInfoView = null;
+    private GloomRetroTouchBridge mRetroTouchBridge = null;
 
     private long mLastProgressUiUpdateMs = 0L;
     private int mInstallCopiedFiles = 0;
@@ -72,6 +73,37 @@ public class ZGloomActivity extends SDLActivity {
         // or by the Java fallback when the selector-confirm button is pressed.
         ensureBuildInfoOverlay();
         hideBuildInfoOverlayOnUiThread();
+
+        // RetroTouch is deliberately kept as an external AAR. The small
+        // Gloom-specific bridge describes actions/layouts and feeds the native
+        // input layer, so future compatible updates only replace the AAR file.
+        if (mLayout != null) {
+            mRetroTouchBridge = new GloomRetroTouchBridge(this, mLayout);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (mRetroTouchBridge != null) {
+            mRetroTouchBridge.onResume();
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        if (mRetroTouchBridge != null) {
+            mRetroTouchBridge.onPause();
+        }
+        super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (mRetroTouchBridge != null) {
+            mRetroTouchBridge.onDestroy();
+        }
+        super.onDestroy();
     }
 
     @Override
@@ -189,7 +221,30 @@ public class ZGloomActivity extends SDLActivity {
             requestBuildInfoOverlayVisible();
         }
         ZGloomActivity.super.resumeNativeThread();
+
+        if (mRetroTouchBridge != null) {
+            mRetroTouchBridge.onNativeThreadStarted();
+        }
     }
+
+    /**
+     * Called by native code when the Gloom state changes. The bridge performs
+     * the UI-thread mode switch and suppresses touch while a controller exists.
+     */
+    public void setRetroTouchDesiredMode(int mode) {
+        if (mRetroTouchBridge != null) {
+            mRetroTouchBridge.setDesiredMode(mode);
+        }
+    }
+
+    // JNI entry points used by GloomRetroTouchBridge. Action indices mirror
+    // RetroTouchInput::Action; navigation is intentionally separate because
+    // Gloom menus consume SDL key events while gameplay polls continuous state.
+    static native void nativeRetroTouchSetAction(int action, boolean pressed);
+    static native void nativeRetroTouchSetMove(float x, float y);
+    static native void nativeRetroTouchAddLook(float deltaX, float deltaY);
+    static native void nativeRetroTouchNavigation(int action, boolean pressed);
+    static native void nativeRetroTouchReset();
 
     /**
      * Called by native code through JNI before the boot selector is displayed.

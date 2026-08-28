@@ -26,6 +26,7 @@ static xmp_context g_xmp = nullptr;
 #include <iostream>
 #include "SaveSystem.h"
 #include "EventReplay.h"
+#include "RetroTouchInput.h"
 
 #include <vector>
 #include <string>
@@ -1800,8 +1801,30 @@ int main(int argc, char* argv[])
 
 	SDL_Log("ZGloom: entering main loop");
 
+#ifdef __ANDROID__
+	int lastRetroTouchMode = -1;
+#endif
+
 	while (notdone)
 	{
+#ifdef __ANDROID__
+		// RetroTouch uses a gameplay layout only while the player is active.
+		// Title, splash, intermission and pause screens use D-pad/OK/Back.
+		// Script parsing/loading has no meaningful input and hides the overlay.
+		int retroTouchMode = 0;
+		if (state == STATE_PLAYING)
+			retroTouchMode = 1;
+		else if (state == STATE_SPLASH || state == STATE_TITLE ||
+			state == STATE_MENU || state == STATE_WAITING)
+			retroTouchMode = 2;
+
+		if (retroTouchMode != lastRetroTouchMode)
+		{
+			RetroTouchInput::NotifyAndroidMode(retroTouchMode);
+			lastRetroTouchMode = retroTouchMode;
+		}
+#endif
+
 		ZHUD_EnsureAlive(ren, renderwidth, renderheight);
 		RendererHooks::beginFrame();
 		ZHUD_Clear();
@@ -2627,6 +2650,11 @@ int main(int argc, char* argv[])
 			RendererHooks::endFramePresent();
 		}
 	}
+
+#ifdef __ANDROID__
+	RetroTouchInput::Reset();
+	RetroTouchInput::NotifyAndroidMode(0);
+#endif
 
 	BGM::Shutdown();
 	xmp_free_context(g_xmp);

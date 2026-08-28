@@ -5,6 +5,7 @@
 #include "hud.h"
 #include "config.h"
 #include "SaveSystem.h"
+#include "RetroTouchInput.h"
 #include <cctype>
 #include <algorithm>
 #include <sstream>
@@ -1628,17 +1629,30 @@ DefenderGame::InputState GameLogic::ReadDefenderInput() const
 {
 	DefenderGame::InputState input;
 	const Uint8* keys = SDL_GetKeyboardState(nullptr);
+	const RetroTouchInput::State touch = RetroTouchInput::GetState();
+	const float touchDeadZone = 0.20f;
 
 	const bool left = keys[Config::GetKey(Config::KEY_LEFT)] != 0 ||
-		keys[Config::GetKey(Config::KEY_SLEFT)] != 0;
+		keys[Config::GetKey(Config::KEY_SLEFT)] != 0 ||
+		touch.actions[RetroTouchInput::ACTION_TURN_LEFT] ||
+		touch.actions[RetroTouchInput::ACTION_STRAFE_LEFT] ||
+		touch.moveX < -touchDeadZone;
 	const bool right = keys[Config::GetKey(Config::KEY_RIGHT)] != 0 ||
-		keys[Config::GetKey(Config::KEY_SRIGHT)] != 0;
-	const bool up = keys[Config::GetKey(Config::KEY_UP)] != 0;
-	const bool down = keys[Config::GetKey(Config::KEY_DOWN)] != 0;
+		keys[Config::GetKey(Config::KEY_SRIGHT)] != 0 ||
+		touch.actions[RetroTouchInput::ACTION_TURN_RIGHT] ||
+		touch.actions[RetroTouchInput::ACTION_STRAFE_RIGHT] ||
+		touch.moveX > touchDeadZone;
+	const bool up = keys[Config::GetKey(Config::KEY_UP)] != 0 ||
+		touch.actions[RetroTouchInput::ACTION_FORWARD] ||
+		touch.moveY < -touchDeadZone;
+	const bool down = keys[Config::GetKey(Config::KEY_DOWN)] != 0 ||
+		touch.actions[RetroTouchInput::ACTION_BACKWARD] ||
+		touch.moveY > touchDeadZone;
 
 	input.moveX = (right ? 1 : 0) - (left ? 1 : 0);
 	input.moveY = (down ? 1 : 0) - (up ? 1 : 0);
-	input.fire = keys[Config::GetKey(Config::KEY_SHOOT)] != 0;
+	input.fire = keys[Config::GetKey(Config::KEY_SHOOT)] != 0 ||
+		touch.actions[RetroTouchInput::ACTION_SHOOT];
 
 	if (Config::HaveController())
 	{
@@ -1798,6 +1812,11 @@ bool GameLogic::Update(Camera* cam)
 	GloomMaths::GetCamRot(cam->rotquick.GetInt()&0xFF, camrots);
 	GloomMaths::GetCamRot(((cam->rotquick.GetInt())+64)&0xFF, camrotstrafe);
 	const Uint8 *keystate = SDL_GetKeyboardState(NULL);
+	const RetroTouchInput::State touchInput = RetroTouchInput::GetState();
+	const float touchDeadZone = 0.20f;
+	float touchLookX = 0.0f;
+	float touchLookY = 0.0f;
+	RetroTouchInput::ConsumeLook(touchLookX, touchLookY);
 
 	Quick newx = cam->x;
 	Quick newz = cam->z;
@@ -1887,15 +1906,28 @@ bool GameLogic::Update(Camera* cam)
 
 		//wire these up to controller as well at some point
 
-		bool controlfire  = keystate[Config::GetKey(Config::KEY_SHOOT)] != 0;
-		bool controlup = keystate[Config::GetKey(Config::KEY_UP)] != 0;
-		bool controldown = keystate[Config::GetKey(Config::KEY_DOWN)] != 0;
-		bool controlleft = keystate[Config::GetKey(Config::KEY_LEFT)] != 0;
-		bool controlright = keystate[Config::GetKey(Config::KEY_RIGHT)] != 0;
-		bool controlstrafeleft = keystate[Config::GetKey(Config::KEY_SLEFT)] != 0;
-		bool controlstraferight = keystate[Config::GetKey(Config::KEY_SRIGHT)] != 0;
-		bool controlstrafemod = keystate[Config::GetKey(Config::KEY_STRAFEMOD)] != 0;
-		bool controlrun = keystate[Config::GetKey(Config::KEY_RUN)] != 0;
+		bool controlfire = keystate[Config::GetKey(Config::KEY_SHOOT)] != 0 ||
+			touchInput.actions[RetroTouchInput::ACTION_SHOOT];
+		bool controlup = keystate[Config::GetKey(Config::KEY_UP)] != 0 ||
+			touchInput.actions[RetroTouchInput::ACTION_FORWARD] ||
+			touchInput.moveY < -touchDeadZone;
+		bool controldown = keystate[Config::GetKey(Config::KEY_DOWN)] != 0 ||
+			touchInput.actions[RetroTouchInput::ACTION_BACKWARD] ||
+			touchInput.moveY > touchDeadZone;
+		bool controlleft = keystate[Config::GetKey(Config::KEY_LEFT)] != 0 ||
+			touchInput.actions[RetroTouchInput::ACTION_TURN_LEFT];
+		bool controlright = keystate[Config::GetKey(Config::KEY_RIGHT)] != 0 ||
+			touchInput.actions[RetroTouchInput::ACTION_TURN_RIGHT];
+		bool controlstrafeleft = keystate[Config::GetKey(Config::KEY_SLEFT)] != 0 ||
+			touchInput.actions[RetroTouchInput::ACTION_STRAFE_LEFT] ||
+			touchInput.moveX < -touchDeadZone;
+		bool controlstraferight = keystate[Config::GetKey(Config::KEY_SRIGHT)] != 0 ||
+			touchInput.actions[RetroTouchInput::ACTION_STRAFE_RIGHT] ||
+			touchInput.moveX > touchDeadZone;
+		bool controlstrafemod = keystate[Config::GetKey(Config::KEY_STRAFEMOD)] != 0 ||
+			touchInput.actions[RetroTouchInput::ACTION_STRAFE_MODIFIER];
+		bool controlrun = keystate[Config::GetKey(Config::KEY_RUN)] != 0 ||
+			touchInput.actions[RetroTouchInput::ACTION_RUN];
 
 		if (Config::HaveController())
 		{
@@ -2111,12 +2143,17 @@ bool GameLogic::Update(Camera* cam)
 			}
 		}
 
-		// mouse control
+		// Mouse and RetroTouch look share Gloom's existing sensitivity setting.
+		// RetroTouch supplies a resolution-independent pixel-like X delta; Gloom
+		// has no vertical look, so Y is consumed above but intentionally ignored.
 		{
 			int mx, my;
 			SDL_GetRelativeMouseState(&mx, &my);
 
-			cam->rotquick.SetVal(cam->rotquick.GetVal() + mx*Config::GetMouseSens() * 800);
+			const float combinedX = static_cast<float>(mx) + touchLookX;
+			const int32_t rotationDelta = static_cast<int32_t>(
+				combinedX * static_cast<float>(Config::GetMouseSens()) * 800.0f);
+			cam->rotquick.SetVal(cam->rotquick.GetVal() + rotationDelta);
 		}
 
 		//gamepad control
